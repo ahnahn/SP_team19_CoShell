@@ -21,4 +21,10 @@ void draw_todo(WINDOW *win_todo);
 /* 메모리 및 파일에 새로운 ToDo(item)를 추가 */
 void add_todo(const char *item);
 
+/* ToDo 목록에서 index번째 항목을 삭제하고 파일을 갱신 */
+void del_todo(int index);
+
+/* 모듈화된 ToDo 모드 진입 */
+void todo_enter(WINDOW *input, WINDOW *todo, WINDOW *custom);
+
 #endif // TODO_H
