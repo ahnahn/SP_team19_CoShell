@@ -408,6 +408,18 @@ static void ui_main(void) {
                         wgetnstr(win_input, port_str, sizeof(port_str) - 1);
                         noecho();
 
+                        if (strcmp(port_str, "q") == 0 || strcmp(port_str, "Q") == 0 || strcmp(port_str, "quit") == 0) {
+                            werase(win_input);
+                            wrefresh(win_input);
+                            werase(win_custom);
+                            box(win_custom, 0, 0);
+                            mvwprintw(win_custom, 1, 2, "Cancelled. Quit program...");
+                            wrefresh(win_custom);
+                            napms(2000); 
+                            return;
+                        }
+
+
                         if (strlen(port_str) == 0) {
                             werase(win_custom);
                             box(win_custom, 0, 0);
