@@ -166,6 +166,11 @@ void chat_client(const char *host,
         mvwprintw(win_chat_border, 1, 2, "[Error] Failed to resolve host: %s", host);
         wrefresh(win_chat_border);
         pthread_mutex_unlock(&clients_lock);
+        napms(2000);
+        werase(win_chat_border);
+        wrefresh(win_chat_border);
+        werase(win_input);
+        wrefresh(win_input);
         return;
     }
 
@@ -178,12 +183,18 @@ void chat_client(const char *host,
     }
     if (connect(sockfd, res->ai_addr, res->ai_addrlen) < 0) {
         pthread_mutex_lock(&clients_lock);
+        werase(win_chat_border);
         box(win_chat_border, 0, 0);
         mvwprintw(win_chat_border, 1, 2, "[Error] Could not connect to %s:%d", host, port);
         wrefresh(win_chat_border);
         pthread_mutex_unlock(&clients_lock);
         close(sockfd);
         freeaddrinfo(res);
+        napms(2000);
+        werase(win_chat_border);
+        wrefresh(win_chat_border);
+        werase(win_input);
+        wrefresh(win_input);
         return;
     }
     freeaddrinfo(res);
