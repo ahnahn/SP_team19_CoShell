@@ -346,7 +346,7 @@ static void ui_main(void) {
             else if (ch == '\n' || ch == KEY_ENTER) {
                 cmdbuf[cmdlen] = '\0';
                 if (strcmp(cmdbuf, "exit") == 0) {
-                    break;
+                    break;  // 메인 UI 종료
                 }
                 else if (cmdbuf[0] == '1') {
                     mode = 1;
@@ -435,8 +435,6 @@ static void ui_main(void) {
                         werase(win_custom);
                         box(win_custom, 0, 0);
                         mvwprintw(win_custom, 1, 2, "Enter Nickname (no spaces):");
-                        werase(win_custom);
-                        box(win_custom, 0, 0);
                         wrefresh(win_custom);
 
                         werase(win_input);
@@ -462,9 +460,18 @@ static void ui_main(void) {
                         break;
                     }
 
-                    // (E) 채팅 모드 진입: win_custom을 채팅창으로 사용
+                    // (E) 채팅 모드 진입 전, 안내 메시지
+                    werase(win_custom);
+                    box(win_custom, 0, 0);
+                    mvwprintw(win_custom, 1, 2, "Type '/quit' to end chat and return to main UI.");
+                    wrefresh(win_custom);
+
+                    // (F) 채팅 모드 진입: 채팅창으로 win_custom, 입력창으로 win_input 사용
                     chat_client(host, port, nickname, win_custom, win_input);
-                    return;
+
+                    // (G) 채팅 모드 종료 후 → 메인 UI(로비)로 돌아가기
+                    werase(win_custom);
+                    create_windows(1);
                 }
                 else if (cmdbuf[0] == '3') {
                     mode = 3;
@@ -504,6 +511,7 @@ static void ui_main(void) {
                     wrefresh(win_custom);
                 }
 
+                // 입력 버퍼 초기화
                 cmdlen = 0;
                 memset(cmdbuf, 0, sizeof(cmdbuf));
                 werase(win_input);
@@ -521,6 +529,7 @@ static void ui_main(void) {
 
     endwin();  // ncurses 종료
 }
+
 
 /*==============================*/
 /*   ToDo – 파일 ↔ 메모리 로직   */
