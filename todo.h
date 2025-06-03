@@ -21,8 +21,23 @@ void draw_todo(WINDOW *win_todo);
 /* 메모리 및 파일에 새로운 ToDo(item)를 추가 */
 void add_todo(const char *item);
 
+/* Todo 목록에서 index번째 항목을 완료 처리 [ ] → [x] */
+void done_todo(int index);
+
+/* Todo 목록에서 index번째 항목을 완료 취소 [x] → [ ] */
+void undo_todo(int index);
+
 /* ToDo 목록에서 index번째 항목을 삭제하고 파일을 갱신 */
 void del_todo(int index);
+
+/* Todo 목록에서 index번째 항목을 new_item으로 수정 */
+void edit_todo(int index, const char *new_item);
+
+/* Help Window 출력 */ 
+void draw_custom_help(WINDOW *custom);
+
+/* user/team 모드 설정 */
+void choose_todo_mode(WINDOW *input, WINDOW *custom);
 
 /* 모듈화된 ToDo 모드 진입 */
 void todo_enter(WINDOW *input, WINDOW *todo, WINDOW *custom);

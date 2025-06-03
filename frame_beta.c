@@ -45,10 +45,11 @@
 // QR 코드에 사용할 최대 파일 크기 (바이트)
 #define MAX_QR_BYTES   800
 
-static WINDOW* win_time = NULL;  // 왼쪽 상단: 시간 표시
-static WINDOW* win_custom = NULL;  // 왼쪽 중간/하단: 로비 또는 모드별 콘텐츠
-static WINDOW* win_todo = NULL;  // 오른쪽 전체: ToDoList 창
-static WINDOW* win_input = NULL;  // 맨 아래: 커맨드 입력창
+WINDOW* win_time = NULL;  	    // 왼쪽 상단: 시간 표시
+static WINDOW* win_custom = NULL;   // 왼쪽 중간/하단: 로비 또는 모드별 콘텐츠
+static WINDOW* win_todo = NULL;     // 오른쪽 전체: ToDoList 창
+static WINDOW* win_input = NULL;    // 맨 아래: 커맨드 입력창
+volatile sig_atomic_t resized = 0;  // 터미널 리사이즈 감지용
 
 static const char* lobby_text[] = {
     "Welcome!",
@@ -76,7 +77,7 @@ static void print_wrapped_lines(WINDOW* win, int start_y, int max_lines, int max
 static void get_time_strings(char* local_buf, int len1,
     char* us_buf, int len2,
     char* uk_buf, int len3);
-static void update_time(WINDOW* w);
+void update_time(WINDOW* w); // Remove static(By Geonwoo)
 static int pick_version_for_module(int max_module);
 static void show_qrcode_fullscreen(const char* path);
 static void process_and_show_file(WINDOW* custom, const char* path);
@@ -95,12 +96,18 @@ static void cleanup_ncurses(void) {
 // ──────────────────────────────────────────────────────────────────────────
 // SIGWINCH(창 리사이즈) 핸들러: 로비 화면으로 돌아가며 창 재구성
 // ──────────────────────────────────────────────────────────────────────────
-static void handle_winch(int sig) {
+/*static void handle_winch(int sig) {
     (void)sig;
     endwin();
     refresh();
     clear();
     create_windows(1);
+}*/
+void handle_winch(int sig) {
+    (void)sig;
+    printf("[WINCH] called!\n");  // 디버깅용
+    fflush(stdout);
+    resized = 1;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -241,7 +248,7 @@ static void create_windows(int in_lobby)
 // ──────────────────────────────────────────────────────────────────────────
 // win_time에 로컬/USA ET/UK GMT 시간 갱신
 // ──────────────────────────────────────────────────────────────────────────
-static void update_time(WINDOW* w)
+void update_time(WINDOW* w)
 {
     char local_buf[32], us_buf[32], uk_buf[32];
     get_time_strings(local_buf, sizeof(local_buf),
@@ -473,10 +480,16 @@ int main(int argc, char* argv[])
     // 프로그램 종료 시 ncurses 정리 보장
     atexit(cleanup_ncurses);
 
+    // 1. SIGWINCH 초기화 → 혹시라도 무시된 상태면 초기화 필요
+    signal(SIGWINCH, SIG_DFL);
+
+    // 2. 다시 우리가 설정
+    signal(SIGWINCH, handle_winch);  // 또는 sigaction 버전도 OK
+
     // Ctrl-C, Ctrl-Z 무시 (exit 명령으로만 종료)
+    // signal(SIGWINCH, handle_winch);
     signal(SIGINT, SIG_IGN);
     signal(SIGTSTP, SIG_IGN);
-    signal(SIGWINCH, handle_winch);
 
     // ncurses 초기화
     initscr();
@@ -511,7 +524,24 @@ int main(int argc, char* argv[])
     int input_y = 1, input_x = 10;
 
     while (1) {
-        // 1초마다 시간 갱신
+        // 터미널 리사이즈 처리
+        if (resized) {
+            // printf("[debug] resized detected\n");
+	    resized = 0;
+            endwin(); refresh(); clear();
+            create_windows(mode == 0);  // 로비면 환영 메시지 포함
+
+            // ToDo 모드면 다시 진입
+	    // printf("[debug] mode after resize: %d\n", mode);
+            if (mode == 1) {
+		// printf("[debug] re-entering todo mode\n");
+                todo_enter(win_input, win_todo, win_custom);
+            }
+
+            continue;
+        }
+	    
+	// 1초마다 시간 갱신
         time_t now = time(NULL);
         if (now != last_time) {
             last_time = now;
@@ -599,11 +629,15 @@ int main(int argc, char* argv[])
                 if (strcmp(cmdbuf, "exit") == 0) {
                     break;
                 }
-                // 1 → To-Do 모드 (예시)
+                // 1 → To-Do 모드
                 else if (cmdlen > 0 && cmdbuf[0] == '1') {
                     mode = 1;
                     todo_enter(win_input, win_todo, win_custom);
-		    mode = 0;
+		    
+		    // 리사이즈가 아닌 경우에만 모드 종료 (by Geonwoo)
+		    if (!resized) {
+		        mode = 0;
+		    }
                 }
                 // 2 → Chat 모드 (예시)
                 else if (cmdlen > 0 && cmdbuf[0] == '2') {
