@@ -3,7 +3,7 @@ CFLAGS  = -Wall -O2 -std=c11
 LIBS    = -lncursesw -lpthread
 
 TARGET  = coshell
-SRC     = coshell.c chat.c
+SRC     = coshell.c chat.c todo.c
 
 .PHONY: all setup install clean
 
