@@ -65,6 +65,7 @@ static WINDOW *win_todo    = NULL;  // 오른쪽 전체: ToDo 목록
 static WINDOW *win_input   = NULL;  // 맨 아래: 커맨드 입력창
 
 volatile sig_atomic_t resized = 0;
+volatile int chat_running = 0;
 
 // 로비 텍스트
 static const char* lobby_text[] = {
@@ -92,8 +93,11 @@ static void print_wrapped_lines(WINDOW* win, int start_y, int max_lines, int max
 static void get_time_strings(char* local_buf, int len1,
                              char* us_buf, int len2,
                              char* uk_buf, int len3);
+                             
+static void *timer_thread_fn(void *arg);
+
        void update_time(WINDOW* w);
-static  int pick_version_for_module(int max_module);
+static int pick_version_for_module(int max_module);
 static void show_qrcode_fullscreen(const char* path);
 static void process_and_show_file(WINDOW* custom, const char* path);
 
@@ -349,7 +353,7 @@ static void ui_main(void) {
                 // (ui_main 안의 '1' 선택 시 todo 모드 진입 부분)
                 else if (cmdbuf[0] == '1') {
                     mode = 1;
-		    todo_enter(win_input, win_todo, win_custom); // todo mode 진입점
+                    todo_enter(win_input, win_todo, win_custom); // todo mode 진입점
                 }
                 // (ui_main 안의 '2' 선택 시 chat 모드 진입 부분)
                 else if (cmdbuf[0] == '2') {
@@ -415,7 +419,6 @@ static void ui_main(void) {
                             return;
                         }
 
-
                         if (strlen(port_str) == 0) {
                             werase(win_custom);
                             box(win_custom, 0, 0);
@@ -475,7 +478,14 @@ static void ui_main(void) {
                     wrefresh(win_custom);
 
                     // (F) 채팅 모드 진입: 채팅창으로 win_custom, 입력창으로 win_input 사용
+                    pthread_t timer_thread_id;
+                    chat_running = 1;
+                    if (pthread_create(&timer_thread_id, NULL, timer_thread_fn, NULL) != 0) {
+                        ; // Thread creation failed, ignoring
+                    }
                     chat_client(host, port, nickname, win_custom, win_input);
+                    chat_running = 0;
+                    pthread_join(timer_thread_id, NULL);
 
                     // (G) 채팅 모드 종료 후 → 메인 UI(로비)로 돌아가기
                     werase(win_custom);
@@ -735,6 +745,15 @@ static int pick_version_for_module(int max_module) {
         if (module_size>max_module) return v-1;
     }
     return 40;
+}
+
+static void *timer_thread_fn(void *arg) {
+    (void)arg;
+    while (chat_running) {
+        update_time(win_time);
+        sleep(1);
+    }
+    return NULL;
 }
 
 /*==============================*/
