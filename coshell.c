@@ -65,7 +65,7 @@ static WINDOW *win_todo    = NULL;  // 오른쪽 전체: ToDo 목록
 static WINDOW *win_input   = NULL;  // 맨 아래: 커맨드 입력창
 
 volatile sig_atomic_t resized = 0;
-volatile int chat_running = 0;
+volatile int chat_running = 0;      // 채팅 모드 활성화 플래그
 
 // 로비 텍스트
 static const char* lobby_text[] = {
@@ -93,9 +93,7 @@ static void print_wrapped_lines(WINDOW* win, int start_y, int max_lines, int max
 static void get_time_strings(char* local_buf, int len1,
                              char* us_buf, int len2,
                              char* uk_buf, int len3);
-                             
-static void *timer_thread_fn(void *arg);
-
+static void *timer_thread_fn(void *arg);  // 타이머 전용 스레드
        void update_time(WINDOW* w);
 static int pick_version_for_module(int max_module);
 static void show_qrcode_fullscreen(const char* path);
@@ -115,7 +113,7 @@ static int setup_serveo_tunnel(int local_port);
 /*          main 함수           */
 /*==============================*/
 int main(int argc, char *argv[]) {
-    setlocale(LC_ALL, "");
+    setlocale(LC_ALL, "");  // 반드시 locale 설정 (wide char 지원)
 
     if (argc == 1) {
         show_main_menu();
@@ -275,7 +273,7 @@ static void ui_main(void) {
     int input_y = 1, input_x = 10;
 
     while (1) {
-        // 매초 시간 업데이트
+        // (1) 매초 시간 업데이트
         time_t now = time(NULL);
         if (now != last_time) {
             last_time = now;
@@ -415,7 +413,7 @@ static void ui_main(void) {
                             box(win_custom, 0, 0);
                             mvwprintw(win_custom, 1, 2, "Cancelled. Quit program...");
                             wrefresh(win_custom);
-                            napms(2000); 
+                            napms(2000);
                             return;
                         }
 
@@ -481,9 +479,10 @@ static void ui_main(void) {
                     pthread_t timer_thread_id;
                     chat_running = 1;
                     if (pthread_create(&timer_thread_id, NULL, timer_thread_fn, NULL) != 0) {
-                        ; // Thread creation failed, ignoring
+                        ; // Thread creation 실패 시 무시
                     }
                     chat_client(host, port, nickname, win_custom, win_input);
+                    // chat_client()가 리턴되면, 즉 "/quit" 명령어로 채팅 탈출 시
                     chat_running = 0;
                     pthread_join(timer_thread_id, NULL);
 
@@ -722,6 +721,16 @@ static void get_time_strings(char* local_buf, int len1,
     strftime(uk_buf, len3, "%Y-%m-%d %H:%M:%S (UK GMT)", &tm_uk);
 }
 
+// 매초 타이머 윈도우를 업데이트해 주는 스레드 함수
+static void *timer_thread_fn(void *arg) {
+    (void)arg;
+    while (chat_running) {
+        update_time(win_time);
+        sleep(1);
+    }
+    return NULL;
+}
+
 void update_time(WINDOW* w) {
     char local_buf[32], us_buf[32], uk_buf[32];
     get_time_strings(local_buf,sizeof(local_buf),
@@ -745,15 +754,6 @@ static int pick_version_for_module(int max_module) {
         if (module_size>max_module) return v-1;
     }
     return 40;
-}
-
-static void *timer_thread_fn(void *arg) {
-    (void)arg;
-    while (chat_running) {
-        update_time(win_time);
-        sleep(1);
-    }
-    return NULL;
 }
 
 /*==============================*/
