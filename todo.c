@@ -1,13 +1,15 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "todo.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-// 전역 ToDo 파일 경로 설정
+/* 전역 ToDo 파일 경로 설정 */
 const char *USER_TODO_FILE = "user_todo.txt";
-const char *TEAM_TODO_FILE  = "team_todo.txt";
+const char *TEAM_TODO_FILE = "team_todo.txt";
 
-// 현재 선택된 ToDo 파일 (동적으로 r변경)
+/* 현재 선택된 ToDo 파일 (동적으로 r변경) */
 char current_todo_file[128] = "user_todo.txt";  // default : user
 
 /* Time 갱신 */

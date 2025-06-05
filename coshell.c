@@ -7,7 +7,7 @@
  *    4) ncurses UI: 분할 창, 버튼, 로비 → ToDo/Chat/QR 전환
  *
  * 빌드 예시:
- *   gcc coshell.c chat.c -o coshell -Wall -O2 -std=c11 -lncursesw -lpthread
+ *   gcc coshell.c chat.c todo.c -o coshell -Wall -O2 -std=c11 -lncursesw -lpthread
  *
  * 사용 패키지 (Ubuntu/Debian):
  *   sudo apt update
@@ -40,10 +40,10 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include "chat.h"
+#include "todo.h"
 
 #define MAX_CLIENTS   5
 #define BUF_SIZE      1024
-#define TODO_FILE     "tasks_personal.txt"
 #define MAX_TODO      100
 #define INPUT_HEIGHT  3
 #define MAX_CMD_LEN   255
@@ -53,20 +53,18 @@
 // Chat 포트 (로컬)
 #define LOCAL_PORT    12345
 
+
 /*==============================*/
 /*   전역 변수 (공유 데이터)    */
 /*==============================*/
 
 // ncurses 윈도우 포인터
-static WINDOW *win_time    = NULL;  // 왼쪽 상단: 시간
+       WINDOW *win_time    = NULL;  // 왼쪽 상단: 시간
 static WINDOW *win_custom  = NULL;  // 왼쪽 중간/하단: 로비·Chat·QR
 static WINDOW *win_todo    = NULL;  // 오른쪽 전체: ToDo 목록
 static WINDOW *win_input   = NULL;  // 맨 아래: 커맨드 입력창
 
-// ToDo 리스트 전역 데이터
-static pthread_mutex_t todo_lock = PTHREAD_MUTEX_INITIALIZER;
-static char *todos[MAX_TODO];
-static int todo_count = 0;
+volatile sig_atomic_t resized = 0;
 
 // 로비 텍스트
 static const char* lobby_text[] = {
@@ -80,8 +78,9 @@ static const char* lobby_text[] = {
 };
 static const int lobby_lines = sizeof(lobby_text)/sizeof(lobby_text[0]);
 
+
 /*==============================*/
-/*    함수 전방 선언             */
+/*        함수 전방 선언        */
 /*==============================*/
 
 // 공통
@@ -93,8 +92,8 @@ static void print_wrapped_lines(WINDOW* win, int start_y, int max_lines, int max
 static void get_time_strings(char* local_buf, int len1,
                              char* us_buf, int len2,
                              char* uk_buf, int len3);
-static void update_time(WINDOW* w);
-static int pick_version_for_module(int max_module);
+       void update_time(WINDOW* w);
+static  int pick_version_for_module(int max_module);
 static void show_qrcode_fullscreen(const char* path);
 static void process_and_show_file(WINDOW* custom, const char* path);
 
@@ -102,16 +101,14 @@ static void process_and_show_file(WINDOW* custom, const char* path);
 static void show_main_menu(void);
 static void cli_main(int argc, char *argv[]);
 static void ui_main(void);
-static void load_todo(void);
-static void draw_todo(WINDOW *win_todo);
-static void add_todo(const char *item);
 static void show_qr_cli(const char *filename);
 
 // Serveo 터널 (Chat 서버용)
 static int setup_serveo_tunnel(int local_port);
 
+
 /*==============================*/
-/*        main 함수             */
+/*          main 함수           */
 /*==============================*/
 int main(int argc, char *argv[]) {
     setlocale(LC_ALL, "");
@@ -144,11 +141,12 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Invalid mode.\n");
         return 1;
     }
+    
     return 0;
 }
 
 /*==============================*/
-/*   메인 메뉴 출력 함수       */
+/*      메인 메뉴 출력 함수     */
 /*==============================*/
 static void show_main_menu(void) {
     int choice = 0;
@@ -194,7 +192,7 @@ static void show_main_menu(void) {
 }
 
 /*==============================*/
-/*       CLI 모드 함수          */
+/*        CLI 모드 함수         */
 /*==============================*/
 static void cli_main(int argc, char *argv[]) {
     if (argc == 0) return;
@@ -245,7 +243,7 @@ static void cli_main(int argc, char *argv[]) {
 }
 
 /*==============================*/
-/*      UI 모드 함수            */
+/*         UI 모드 함수         */
 /*==============================*/
 static void ui_main(void) {
     setlocale(LC_ALL, "");
@@ -268,7 +266,7 @@ static void ui_main(void) {
     char pathbuf[MAX_PATH_LEN + 1] = {0};
     int pathlen = 0;
     time_t last_time = 0;
-    int mode = 0;  // 0=로비,1=ToDo,2=Chat,3=QR 입력,4=QR 전체화면
+    int mode = 0;  // 0 = 로비, 1 = ToDo, 2 = Chat, 3 = QR 입력, 4 = QR 전체화면
 
     int input_y = 1, input_x = 10;
 
@@ -348,14 +346,12 @@ static void ui_main(void) {
                 if (strcmp(cmdbuf, "exit") == 0) {
                     break;  // 메인 UI 종료
                 }
+                // (ui_main 안의 '1' 선택 시 todo 모드 진입 부분)
                 else if (cmdbuf[0] == '1') {
                     mode = 1;
-                    werase(win_custom);
-                    box(win_custom, 0, 0);
-                    mvwprintw(win_custom, 1, 2, "Entering To-Do List mode...");
-                    wrefresh(win_custom);
+		    todo_enter(win_input, win_todo, win_custom); // todo mode 진입점
                 }
-                // (ui_main 안의 '2' 선택 시 채팅 모드 진입 부분)
+                // (ui_main 안의 '2' 선택 시 chat 모드 진입 부분)
                 else if (cmdbuf[0] == '2') {
                     // (A) Chat 모드 진입 안내
                     werase(win_custom);
@@ -542,51 +538,8 @@ static void ui_main(void) {
     endwin();  // ncurses 종료
 }
 
-
 /*==============================*/
-/*   ToDo – 파일 ↔ 메모리 로직   */
-/*==============================*/
-static void load_todo(void) {
-    FILE *fp = fopen(TODO_FILE, "r");
-    if (!fp) return;
-    pthread_mutex_lock(&todo_lock);
-    todo_count = 0;
-    char line[256];
-    while (fgets(line, sizeof(line), fp) && todo_count < MAX_TODO) {
-        line[strcspn(line, "\n")] = '\0';
-        todos[todo_count++] = strdup(line);
-    }
-    pthread_mutex_unlock(&todo_lock);
-    fclose(fp);
-}
-
-static void draw_todo(WINDOW *win_todo) {
-    pthread_mutex_lock(&todo_lock);
-    werase(win_todo);
-    box(win_todo, 0, 0);
-    mvwprintw(win_todo, 0, 2, " ToDo List ");
-    for (int i = 0; i < todo_count; i++) {
-        mvwprintw(win_todo, i + 1, 2, "%d. %s", i + 1, todos[i]);
-    }
-    pthread_mutex_unlock(&todo_lock);
-    wrefresh(win_todo);
-}
-
-static void add_todo(const char *item) {
-    pthread_mutex_lock(&todo_lock);
-    if (todo_count < MAX_TODO) {
-        todos[todo_count++] = strdup(item);
-        FILE *fp = fopen(TODO_FILE, "a");
-        if (fp) {
-            fprintf(fp, "%s\n", item);
-            fclose(fp);
-        }
-    }
-    pthread_mutex_unlock(&todo_lock);
-}
-
-/*==============================*/
-/*   QR 코드(전체화면) 로직      */
+/*   QR 코드(전체화면) 로직     */
 /*==============================*/
 static void show_qrcode_fullscreen(const char* path) {
     void (*old_winch)(int) = signal(SIGWINCH, SIG_IGN);
@@ -722,7 +675,7 @@ static void process_and_show_file(WINDOW* custom, const char* path) {
 }
 
 /*==============================*/
-/*   ncurses 초기화/정리/리사이즈 */
+/* ncurses 초기화/정리/리사이즈 */
 /*==============================*/
 static void cleanup_ncurses(void) {
     if (win_time)   { delwin(win_time);   win_time = NULL; }
@@ -759,7 +712,7 @@ static void get_time_strings(char* local_buf, int len1,
     strftime(uk_buf, len3, "%Y-%m-%d %H:%M:%S (UK GMT)", &tm_uk);
 }
 
-static void update_time(WINDOW* w) {
+void update_time(WINDOW* w) {
     char local_buf[32], us_buf[32], uk_buf[32];
     get_time_strings(local_buf,sizeof(local_buf),
                      us_buf,sizeof(us_buf),
@@ -785,7 +738,7 @@ static int pick_version_for_module(int max_module) {
 }
 
 /*==============================*/
-/*  ncurses 윈도우 생성 함수    */
+/*   ncurses 윈도우 생성 함수   */
 /*==============================*/
 static void print_wrapped_lines(WINDOW* win, int start_y, int max_lines, int max_cols,
                                 const char* lines[], int n)
@@ -867,7 +820,7 @@ static void create_windows(int in_lobby) {
 }
 
 /*==============================*/
-/*   Serveo 터널 (Chat 서버용)   */
+/*   Serveo 터널 (Chat 서버용)  */
 /*==============================*/
 static int setup_serveo_tunnel(int local_port) {
     int pipe_fd[2];
