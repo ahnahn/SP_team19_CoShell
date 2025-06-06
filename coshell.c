@@ -818,7 +818,10 @@ static void process_and_show_file(WINDOW* custom, const char* path) {
         mvwprintw(custom, 3, 2, "Press any key to return to the main menu...");
         wrefresh(custom);
         wgetch(custom);
-        ui_main();
+
+        create_windows(1);
+        load_todo();
+        draw_todo(win_todo);
         return;
     }
 
