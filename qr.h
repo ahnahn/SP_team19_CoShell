@@ -3,27 +3,25 @@
 
 #include <ncurses.h>
 
-/*
- * 전체 화면으로 QR 코드를 보여주는 함수.
- *   - path: QR로 변환할 파일 경로 (".c" 또는 ".txt"만 허용)
- *   - 내부에서 터미널 크기를 재검사하고, 작으면 바로 메인 UI로 복귀
+/**
+ * 터미널 UI 모드(전체화면)에서, 주어진 파일(path)의 내용을 QR 코드로 보여줍니다.
+ * - custom: QR 안내/메시지를 띄울 WINDOW*
+ * - path: .c 또는 .txt 파일 경로
+ *
+ * 내부적으로:
+ *  1) 파일 존재 여부와 확장자(.c/.txt) 체크
+ *  2) 크기(MAX_QR_BYTES=800 바이트) 초과 시 오류 메시지 후 return
+ *  3) ‘Press any key to view QR…’ 메시지 후 전체화면 QR 창(show_qrcode_fullscreen) 호출
  */
-void show_qrcode_fullscreen(const char *path);
+void process_and_show_file(WINDOW* custom, const char* path);
 
-/*
- * 파일 경로를 받아서:
- *   1) 파일이 없으면 에러 메시지 후 메인 UI로 돌아감
- *   2) 확장자가 잘못되었으면 간단 메시지 후 복귀
- *   3) 크기가 너무 크면 메시지 후 복귀
- *   4) 정상이라면 안내 메시지 후 show_qrcode_fullscreen 호출
- *   - custom: 왼쪽 중간/하단에 해당하는 ncurses 창
+/**
+ * CLI 모드에서, 주어진 문자열(filename)에 대해 ASCII 모드 QR 코드를 출력합니다.
+ * - filename: QR로 만들 데이터(일반적으로 파일 경로)
+ *
+ * 내부적으로:
+ *   qrencode -t ASCII -o - 'filename'
  */
-void process_and_show_file(WINDOW *custom, const char *path);
-
-/*
- * CLI 모드에서 QR 코드를 ASCII로 터미널에 출력하는 함수.
- *   - filename: QR을 생성할 파일 경로
- */
-void show_qr_cli(const char *filename);
+void show_qr_cli(const char* filename);
 
 #endif // QR_H
