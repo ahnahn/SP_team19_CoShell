@@ -375,6 +375,8 @@ void todo_enter(WINDOW *input, WINDOW *todo, WINDOW *custom) {
                 box(custom, 0, 0);
                 mvwprintw(custom, 1, 2, "Unknown command: %s", buf);
                 wrefresh(custom);
+                napms(2000);  // 2초 기다린 후
+                draw_custom_help(custom);  // ToDo 도움말 다시 표시
             }
 
             // 입력창 리셋
