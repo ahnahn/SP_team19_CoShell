@@ -1,21 +1,29 @@
 #ifndef QR_H
 #define QR_H
 
-/*
- * show_qr:
- *   filename 경로에 있는 파일을 QR 코드로 만들어서
- *   터미널(또는 ncurses 윈도우)로 ASCII QR 출력을 수행
- *
- * 파라미터:
- *   win   : ncurses WINDOW* (NULL이면 stdout에 출력)
- *   file  : QR로 만들 원본 파일 경로
- *
- * 사용 예:
- *   show_qr(NULL, "somefile.txt");        // 터미널(printf)로 ASCII QR 출력
- *   show_qr(win_chat, "/path/to/file.pdf"); // win_chat 윈도우에 출력
- */
-#include <ncurses.h>  // WINDOW
+#include <ncurses.h>
 
-void show_qr(WINDOW *win, const char *filename);
+/*
+ * 전체 화면으로 QR 코드를 보여주는 함수.
+ *   - path: QR로 변환할 파일 경로 (".c" 또는 ".txt"만 허용)
+ *   - 내부에서 터미널 크기를 재검사하고, 작으면 바로 메인 UI로 복귀
+ */
+void show_qrcode_fullscreen(const char *path);
+
+/*
+ * 파일 경로를 받아서:
+ *   1) 파일이 없으면 에러 메시지 후 메인 UI로 돌아감
+ *   2) 확장자가 잘못되었으면 간단 메시지 후 복귀
+ *   3) 크기가 너무 크면 메시지 후 복귀
+ *   4) 정상이라면 안내 메시지 후 show_qrcode_fullscreen 호출
+ *   - custom: 왼쪽 중간/하단에 해당하는 ncurses 창
+ */
+void process_and_show_file(WINDOW *custom, const char *path);
+
+/*
+ * CLI 모드에서 QR 코드를 ASCII로 터미널에 출력하는 함수.
+ *   - filename: QR을 생성할 파일 경로
+ */
+void show_qr_cli(const char *filename);
 
 #endif // QR_H
