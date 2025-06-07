@@ -45,7 +45,7 @@
 // QR 코드에 사용할 최대 파일 크기 (바이트)
 #define MAX_QR_BYTES   800
 
-WINDOW* win_time = NULL;  	    // 왼쪽 상단: 시간 표시
+       WINDOW* win_time = NULL;     // 왼쪽 상단: 시간 표시
 static WINDOW* win_custom = NULL;   // 왼쪽 중간/하단: 로비 또는 모드별 콘텐츠
 static WINDOW* win_todo = NULL;     // 오른쪽 전체: ToDoList 창
 static WINDOW* win_input = NULL;    // 맨 아래: 커맨드 입력창
@@ -72,13 +72,13 @@ static const int lobby_lines = sizeof(lobby_text) / sizeof(lobby_text[0]);
 static void cleanup_ncurses(void);
 static void handle_winch(int sig);
 static void create_windows(int in_lobby);
-static void print_wrapped_lines(WINDOW* win, int start_y, int max_lines, int max_cols,
-    const char* lines[], int n);
-static void get_time_strings(char* local_buf, int len1,
-    char* us_buf, int len2,
-    char* uk_buf, int len3);
-void update_time(WINDOW* w); // Remove static(By Geonwoo)
-static int pick_version_for_module(int max_module);
+static void print_wrapped_lines(WINDOW* win, int start_y, int max_lines, int max_cols, const char* lines[], int n);
+static void get_time_strings(char* local_buf, int len1, char* us_buf, int len2, char* uk_buf, int len3);
+       void update_time(WINDOW* w); // Remove static
+static int  pick_version_for_module(int max_module);
+static void restore_lobby_screen(WINDOW *custom_win);
+
+// QR mode
 static void show_qrcode_fullscreen(const char* path);
 static void process_and_show_file(WINDOW* custom, const char* path);
 
@@ -105,7 +105,6 @@ static void cleanup_ncurses(void) {
 }*/
 void handle_winch(int sig) {
     (void)sig;
-    printf("[WINCH] called!\n");  // 디버깅용
     fflush(stdout);
     resized = 1;
 }
@@ -281,6 +280,26 @@ static int pick_version_for_module(int max_module) {
         }
     }
     return 40;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// restore_lobby_screen:
+//  로비 화면 복원 처리
+//  로비 모드(=mode 0)일 때 win_custom 창에 환영 메시지를 출력
+// ──────────────────────────────────────────────────────────────────────────
+static void restore_lobby_screen(WINDOW *custom_win) {
+    werase(custom_win);
+    box(custom_win, 0, 0);
+
+    int maxy, maxx;
+    getmaxyx(custom_win, maxy, maxx);
+    int inner_lines = maxy - 2;
+    int inner_cols = maxx - 4;
+
+    print_wrapped_lines(custom_win, 1, inner_lines, inner_cols,
+        lobby_text, lobby_lines);
+
+    wrefresh(custom_win);
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -487,7 +506,6 @@ int main(int argc, char* argv[])
     signal(SIGWINCH, handle_winch);  // 또는 sigaction 버전도 OK
 
     // Ctrl-C, Ctrl-Z 무시 (exit 명령으로만 종료)
-    // signal(SIGWINCH, handle_winch);
     signal(SIGINT, SIG_IGN);
     signal(SIGTSTP, SIG_IGN);
 
@@ -526,17 +544,16 @@ int main(int argc, char* argv[])
     while (1) {
         // 터미널 리사이즈 처리
         if (resized) {
-            // printf("[debug] resized detected\n");
 	    resized = 0;
-            endwin(); refresh(); clear();
-            create_windows(mode == 0);  // 로비면 환영 메시지 포함
+           
+	    endwin(); 
+	    refresh(); 
+	    clear();
+            
+	    create_windows(mode == 0);  // 로비면 환영 메시지 포함
 
             // ToDo 모드면 다시 진입
-	    // printf("[debug] mode after resize: %d\n", mode);
-            if (mode == 1) {
-		// printf("[debug] re-entering todo mode\n");
-                todo_enter(win_input, win_todo, win_custom);
-            }
+            if (mode == 1) todo_enter(win_input, win_todo, win_custom);
 
             continue;
         }
@@ -634,10 +651,16 @@ int main(int argc, char* argv[])
                     mode = 1;
                     todo_enter(win_input, win_todo, win_custom);
 		    
-		    // 리사이즈가 아닌 경우에만 모드 종료 (by Geonwoo)
+		    // 리사이즈가 아닌 경우에만 모드 종료
 		    if (!resized) {
 		        mode = 0;
 		    }
+
+		    // 종료 후 로비로
+		    mode = 0;
+                    if (mode == 0) {
+	    		restore_lobby_screen(win_custom);
+    		    }
                 }
                 // 2 → Chat 모드 (예시)
                 else if (cmdlen > 0 && cmdbuf[0] == '2') {
@@ -661,14 +684,14 @@ int main(int argc, char* argv[])
                     box(win_input, 0, 0);
                     wrefresh(win_input);
                 }
-                /* // a <item> → To-Do 추가 예시: 맨 아래 줄에 추가
+                // a <item> → To-Do 추가 예시: 맨 아래 줄에 추가
                 else if (cmdlen > 2 && cmdbuf[0] == 'a' && cmdbuf[1] == ' ') {
                     const char* item = cmdbuf + 2;
                     int y_max, x_max;
                     getmaxyx(win_todo, y_max, x_max);
                     mvwprintw(win_todo, y_max - 2, 2, "- %s", item);
                     wrefresh(win_todo);
-                } */
+                }
                 // f <path> → 파일 경로로 직접 QR 모드 (800바이트 검사 포함)
                 else if (cmdlen > 2 && cmdbuf[0] == 'f' && cmdbuf[1] == ' ') {
                     const char* filepath = cmdbuf + 2;

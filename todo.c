@@ -9,7 +9,7 @@
 const char *USER_TODO_FILE = "user_todo.txt";
 const char *TEAM_TODO_FILE = "team_todo.txt";
 
-/* 현재 선택된 ToDo 파일 (동적으로 r변경) */
+/* 현재 선택된 ToDo 파일 (동적으로 변경) */
 char current_todo_file[128] = "user_todo.txt";  // default : user
 
 /* Time 갱신 */
@@ -55,7 +55,6 @@ void draw_todo(WINDOW *win_todo) {
     box(win_todo, 0, 0);
     mvwprintw(win_todo, 0, 2, " ToDo List ");
     for (int i = 0; i < todo_count; i++) {
-        mvwprintw(win_todo, i + 1, 1, "                       "); // 한 줄 미리 지우기
 	mvwprintw(win_todo, i + 1, 2, "%d. %s", i + 1, todos[i]);
     }
     pthread_mutex_unlock(&todo_lock);
@@ -224,46 +223,16 @@ void edit_todo(int index, const char *new_item) {
 void draw_custom_help(WINDOW *custom) {
     werase(custom);
     box(custom, 0, 0);
-    mvwprintw(custom, 1, 2, "To-Do Mode: [%s]",
-        strcmp(current_todo_file, TEAM_TODO_FILE) == 0 ? "team" : "user");
-    mvwprintw(custom, 2, 2, "add  <item>");
-    mvwprintw(custom, 3, 2, "done <num>");
-    mvwprintw(custom, 4, 2, "undo <num>");
-    mvwprintw(custom, 5, 2, "del  <num>");
-    mvwprintw(custom, 6, 2, "edt  <num> <new item>");
-    mvwprintw(custom, 7, 2, "q = quit");
+    mvwprintw(custom, 1, 2, "To-Do [%s] Mode",
+        strcmp(current_todo_file, TEAM_TODO_FILE) == 0 ? "Team" : "User");
+    mvwprintw(custom, 2, 2, "team/user → switch mode");
+    mvwprintw(custom, 3, 2, "add  <item>");
+    mvwprintw(custom, 4, 2, "done <num>");
+    mvwprintw(custom, 5, 2, "undo <num>");
+    mvwprintw(custom, 6, 2, "del  <num>");
+    mvwprintw(custom, 7, 2, "edit <num> <new item>");
+    mvwprintw(custom, 8, 2, "q = quit");
     wrefresh(custom);
-}
-
-/*==============================*/
-/*        초기 모드 설정        */
-/*==============================*/
-void choose_todo_mode(WINDOW *input, WINDOW *custom) {
-    // 안내 출력 (custom 창)
-    werase(custom);
-    box(custom, 0, 0);
-    mvwprintw(custom, 1, 2, "ToDo Mode: choose [user/team] (default: user)");
-    wrefresh(custom);
-
-    // 입력창 초기화
-    werase(input);
-    box(input, 0, 0);
-    mvwprintw(input, 1, 2, "Mode:");
-    wmove(input, 1, 7);  // "Mode:" 다음으로 커서 이동
-    wrefresh(input);
-
-    // 사용자 입력 받기
-    char mode_buf[32];
-    echo();
-    wgetnstr(input, mode_buf, sizeof(mode_buf) - 1);
-    noecho();
-
-    // 모드 설정
-    if (strcmp(mode_buf, "team") == 0) {
-        strcpy(current_todo_file, TEAM_TODO_FILE);
-    } else {
-        strcpy(current_todo_file, USER_TODO_FILE);
-    }
 }
 
 /*==============================*/
@@ -274,7 +243,7 @@ void todo_enter(WINDOW *input, WINDOW *todo, WINDOW *custom) {
     int len = 0;
     int input_y = 1, input_x = 10;
 
-    choose_todo_mode(input, custom);
+    strcpy(current_todo_file, USER_TODO_FILE);
     load_todo();
     draw_todo(todo);
     draw_custom_help(custom);
@@ -284,10 +253,8 @@ void todo_enter(WINDOW *input, WINDOW *todo, WINDOW *custom) {
 
     // 입력 루프
     while (1) {
-	
 	// 터미널 리사이즈 감지 시 빠져나감
         if (resized) {
-            resized = 0;   // 처리 후 플래그 리셋
             break;
         }
 
@@ -295,19 +262,12 @@ void todo_enter(WINDOW *input, WINDOW *todo, WINDOW *custom) {
         wrefresh(input);
         wtimeout(input, 200);
 	
-	// 터미널 리사이즈 감지 시 빠져나감
-        if (resized) {
-            resized = 0;   // 처리 후 플래그 리셋
-            break;
-        }
-
 	// 1초마다 시계 갱신
         time_t now = time(NULL);
         if (now != last_time) {
             last_time = now;
             update_time(win_time);
         }
-
 
         int ch = wgetch(input);
         if (ch == ERR) continue;
@@ -318,9 +278,20 @@ void todo_enter(WINDOW *input, WINDOW *todo, WINDOW *custom) {
             if (strcmp(buf, "q") == 0) break;
 	    
 	    if (strcmp(buf, "team") == 0 || strcmp(buf, "user") == 0) {
-    		// do nothing → 무시하거나 메시지 출력만
-    		mvwprintw(custom, 1, 2, "Already in ToDo mode. q and re-enter to change.");
-    		wrefresh(custom);
+		strcpy(current_todo_file, strcmp(buf, "team") == 0 ? TEAM_TODO_FILE : USER_TODO_FILE);
+                load_todo();
+                draw_todo(todo);
+		
+		// 모드 전환 안내 출력
+                draw_custom_help(custom);
+                werase(custom);
+                box(custom, 0, 0);
+                mvwprintw(custom, 1, 2, "Switched to [%s] mode", buf);
+                wrefresh(custom);
+		napms(2000);
+		
+		// 다시 도움말 출력
+		draw_custom_help(custom);
 	    }
 	    else if (strncmp(buf, "add ", 4) == 0 && len > 4) {
                 add_todo(buf + 4);
@@ -353,11 +324,11 @@ void todo_enter(WINDOW *input, WINDOW *todo, WINDOW *custom) {
                     draw_todo(todo);
                 }
             }
-	    else if (strncmp(buf, "edt ", 4) == 0) {
-                char *space = strchr(buf + 4, ' ');
+	    else if (strncmp(buf, "edit ", 5) == 0) {
+                char *space = strchr(buf + 5, ' ');
                 if (space) {
                     *space = '\0';
-                    int idx = atoi(buf + 4);
+                    int idx = atoi(buf + 5);
                     char *new_text = space + 1;
 
                     if (idx <= 0 || strlen(new_text) == 0) {
@@ -375,10 +346,11 @@ void todo_enter(WINDOW *input, WINDOW *todo, WINDOW *custom) {
                 box(custom, 0, 0);
                 mvwprintw(custom, 1, 2, "Unknown command: %s", buf);
                 wrefresh(custom);
-                napms(2000);  // 2초 기다린 후
-                draw_custom_help(custom);  // ToDo 도움말 다시 표시
+		
+		// 2초 기다린 후 ToDo 도움말 다시 표시
+                napms(2000);
+                draw_custom_help(custom);
             }
-
             // 입력창 리셋
             len = 0;
             memset(buf, 0, sizeof(buf));
