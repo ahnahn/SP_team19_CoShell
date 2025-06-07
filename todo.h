@@ -36,6 +36,9 @@ void edit_todo(int index, const char *new_item);
 /* Help Window 출력 */ 
 void draw_custom_help(WINDOW *custom);
 
+/* 오류 메시지 출력 함수 */
+void show_error(WINDOW *custom, const char *fmt, ...);
+
 /* 모듈화된 ToDo 모드 진입 */
 void todo_enter(WINDOW *input, WINDOW *todo, WINDOW *custom);
 

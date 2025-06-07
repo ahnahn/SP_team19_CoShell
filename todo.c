@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
 /* 전역 ToDo 파일 경로 설정 */
 const char *USER_TODO_FILE = "user_todo.txt";
@@ -73,6 +74,13 @@ void add_todo(const char *item) {
 
     char formatted[256];
     snprintf(formatted, sizeof(formatted), "%s [ ]", item);  // 항목 + 완료 상태 추가
+    
+    char *new_item = strdup(formatted);
+    if (!new_item) {
+        pthread_mutex_unlock(&todo_lock);
+        return;  // strdup 실패: 메모리 부족 등
+    }
+
     todos[todo_count++] = strdup(formatted);
 
     FILE *fp = fopen(current_todo_file, "a");
@@ -203,6 +211,12 @@ void edit_todo(int index, const char *new_item) {
     char formatted[256];
     snprintf(formatted, sizeof(formatted), "%s [%c]", new_item, is_done ? 'x' : ' ');
 
+    char *new_str = strdup(formatted);
+    if (!new_str) {
+        pthread_mutex_unlock(&todo_lock);
+        return;  // strdup 실패 시 바로 종료
+    }
+
     todos[i] = strdup(formatted);
 
     // 파일 갱신
@@ -236,6 +250,24 @@ void draw_custom_help(WINDOW *custom) {
 }
 
 /*==============================*/
+/*    오류 메시지 출력 함수     */
+/*==============================*/
+void show_error(WINDOW *custom, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+
+    werase(custom);
+    box(custom, 0, 0);
+    mvwprintw(custom, 1, 2, "[Error] ");
+    vw_printw(custom, fmt, args);  // 포맷 적용된 메시지 출력
+    va_end(args);
+
+    wrefresh(custom);
+    napms(2000);  // 2초 대기
+    draw_custom_help(custom);  // 도움말 다시 출력
+}
+
+/*==============================*/
 /*        ToDo 모드 진입        */
 /*==============================*/
 void todo_enter(WINDOW *input, WINDOW *todo, WINDOW *custom) {	
@@ -250,7 +282,8 @@ void todo_enter(WINDOW *input, WINDOW *todo, WINDOW *custom) {
 
     // 시간 갱신용 타이머
     time_t last_time = 0;
-
+    wtimeout(input, 200);
+    
     // 입력 루프
     while (1) {
 	// 터미널 리사이즈 감지 시 빠져나감
@@ -260,7 +293,6 @@ void todo_enter(WINDOW *input, WINDOW *todo, WINDOW *custom) {
 
         wmove(input, input_y, input_x + len);
         wrefresh(input);
-        wtimeout(input, 200);
 	
 	// 1초마다 시계 갱신
         time_t now = time(NULL);
@@ -283,12 +315,12 @@ void todo_enter(WINDOW *input, WINDOW *todo, WINDOW *custom) {
                 draw_todo(todo);
 		
 		// 모드 전환 안내 출력
-                draw_custom_help(custom);
                 werase(custom);
                 box(custom, 0, 0);
                 mvwprintw(custom, 1, 2, "Switched to [%s] mode", buf);
                 wrefresh(custom);
 		napms(2000);
+                draw_custom_help(custom);
 		
 		// 다시 도움말 출력
 		draw_custom_help(custom);
@@ -299,47 +331,49 @@ void todo_enter(WINDOW *input, WINDOW *todo, WINDOW *custom) {
             }
 	    else if (strncmp(buf, "done ", 5) == 0) {
     		int idx = atoi(buf + 5);
-    		if (idx > 0) {
-        	    done_todo(idx);
-        	    draw_todo(todo);
-    		} else {
-       		    mvwprintw(custom, 6, 2, "Invalid index: %s", buf + 5);
-    		}
+		if (idx <= 0 || idx > todo_count) {
+    		    show_error(custom, "Invalid index: %d", idx);
+		} else {
+    		    done_todo(idx);
+    		    draw_todo(todo);
+		}
 	    }
 	    else if (strncmp(buf, "undo ", 5) == 0) {
-    		int idx = atoi(buf + 5);
-    		if (idx > 0) {
-        	    undo_todo(idx);
-        	    draw_todo(todo);
-    		} else {
-        	    mvwprintw(custom, 6, 2, "Invalid index: %s", buf + 5);
-    		}
+	        int idx = atoi(buf + 5);
+		if (idx <= 0 || idx > todo_count) {
+    		    show_error(custom, "Invalid index: %d", idx);
+		} else {
+    		    undo_todo(idx);
+    		    draw_todo(todo);
+		}
 	    }
 	    else if (strncmp(buf, "del ", 4) == 0) {
                 int idx = atoi(buf + 4);
-                if (idx <= 0) {
-                    mvwprintw(custom, 6, 2, "Invalid number: %s", buf + 4);
-                } else {
-                    del_todo(idx);
-                    draw_todo(todo);
-                }
+		if (idx <= 0 || idx > todo_count) {
+    		    show_error(custom, "Invalid index: %d", idx);
+   		} else {
+    		    del_todo(idx);
+     		    draw_todo(todo);
+		}
             }
 	    else if (strncmp(buf, "edit ", 5) == 0) {
-                char *space = strchr(buf + 5, ' ');
-                if (space) {
-                    *space = '\0';
-                    int idx = atoi(buf + 5);
-                    char *new_text = space + 1;
+    	        char *space = strchr(buf + 5, ' ');
+		if (space) {
+    		    *space = '\0';
+    		    int idx = atoi(buf + 5);
+    		    char *new_text = space + 1;
 
-                    if (idx <= 0 || strlen(new_text) == 0) {
-                        mvwprintw(custom, 6, 2, "Invalid edit command.");
-                    } else {
-                        edit_todo(idx, new_text);
-                        draw_todo(todo);
-                    }
-                } else {
-                    mvwprintw(custom, 6, 2, "Usage: edit <num> <new text>");
-    	        }
+    		    if (strlen(new_text) == 0) {
+        	        show_error(custom, "New item text is empty.");
+    		    } else if (idx <= 0 || idx > todo_count) {
+        		show_error(custom, "Invalid index: %d", idx);
+    		    } else {
+        		edit_todo(idx, new_text);
+        		draw_todo(todo);
+    		    }
+		} else {
+    			show_error(custom, "Usage: edit <num> <new text>");
+		}
 	    } 
 	    else {
                 werase(custom);
