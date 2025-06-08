@@ -5,6 +5,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <pthread.h>
+#include <signal.h>
+#include <time.h>
+#include <ncurses.h>
+
+#define BUF_SIZE 2048
 
 /* 전역 ToDo 파일 경로 설정 */
 const char *USER_TODO_FILE = "user_todo.txt";
@@ -14,18 +23,26 @@ const char *TEAM_TODO_FILE = "team_todo.txt";
 char current_todo_file[128] = "user_todo.txt";  // default : user
 
 /* Time 갱신 */
-#include <time.h>
 extern WINDOW* win_time;
 void update_time(WINDOW* w);
 
 /* Resize Flag */
-#include <signal.h>
 extern volatile sig_atomic_t resized;
 
 /* ToDo 전역변수 정의 */
 pthread_mutex_t todo_lock = PTHREAD_MUTEX_INITIALIZER;
 char *todos[MAX_TODO];
 int todo_count = 0;
+
+/* 서버 설정 */
+#define SERVER_HOST "serveo.net"
+#define SERVER_PORT 12345
+
+/* 팀 모드 연결 상태 */
+static int current_socket = -1;
+static int is_team_mode = 0;
+
+
 
 /*==============================*/
 /*   ToDo 리스트 로드 함수      */
