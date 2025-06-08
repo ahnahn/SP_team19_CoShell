@@ -35,6 +35,22 @@ int client_socks[MAX_CLIENTS];
 int client_count = 0;
 
 /*==============================*/
+/*   채팅 히스토리 버퍼           */
+/*==============================*/
+#define MAX_HISTORY 1000
+static char *chat_history[MAX_HISTORY];
+static int history_count = 0;
+
+static void add_history(const char *msg) {
+    if (history_count >= MAX_HISTORY) {
+        free(chat_history[0]);
+        memmove(chat_history, chat_history + 1, sizeof(char*) * (MAX_HISTORY - 1));
+        history_count--;
+    }
+    chat_history[history_count++] = strdup(msg);
+}
+
+/*==============================*/
 /*   내부 전역 변수              */
 /*==============================*/
 static int sockfd;                  // 채팅 소켓 디스크립터
@@ -222,6 +238,11 @@ void chat_client(const char *host,
             box(win_chat_border,0,0); wrefresh(win_chat_border);
             wrefresh(win_chat_inner);
             box(g_win_input,0,0);     wrefresh(g_win_input);
+            // 히스토리 다시 그리기
+            for (int i = 0; i < history_count; i++) {
+                wprintw(win_chat_inner, "%s", chat_history[i]);
+            }
+            wrefresh(win_chat_inner);
             continue;
         }
 
@@ -249,11 +270,11 @@ void chat_client(const char *host,
                 strcat(sendbuf,"\n");
                 send(sockfd, sendbuf, strlen(sendbuf),0);
                 pthread_mutex_lock(&clients_lock);
-                box(win_chat_border,0,0);
                 wprintw(win_chat_inner,"%s",sendbuf);
                 wrefresh(win_chat_inner);
                 wrefresh(win_chat_border);
                 pthread_mutex_unlock(&clients_lock);
+                add_history(sendbuf);
             }
             len=0; inputbuf[0]='\0';
             continue;
@@ -287,11 +308,11 @@ static void *chat_recv_handler_internal(void *arg) {
         if (len<=0) break;
         buf[len]='\0';
         pthread_mutex_lock(&clients_lock);
-        box(win_chat_border,0,0);
         wprintw(win_chat_inner,"%s",buf);
         wrefresh(win_chat_inner);
         wrefresh(win_chat_border);
         pthread_mutex_unlock(&clients_lock);
+        add_history(buf);
     }
     return NULL;
 }
