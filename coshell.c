@@ -43,7 +43,6 @@
 
 #define MAX_CLIENTS   5
 #define BUF_SIZE      1024
-#define MAX_TODO      100
 #define INPUT_HEIGHT  3
 #define MAX_CMD_LEN   255
 #define MAX_PATH_LEN  511
@@ -56,13 +55,13 @@
 /*==============================*/
 
 // ncurses 윈도우 포인터
-WINDOW *win_time    = NULL;  // 왼쪽 상단: 시간 표시
+       WINDOW *win_time    = NULL;  // 왼쪽 상단: 시간 표시
 static WINDOW *win_custom  = NULL;  // 왼쪽 중간/하단: 로비·Chat·QR
 static WINDOW *win_todo    = NULL;  // 오른쪽 전체: ToDo 목록
 static WINDOW *win_input   = NULL;  // 맨 아래: 커맨드 입력창
 
-volatile sig_atomic_t resized = 0;   // 터미널 리사이즈 감지 플래그
-volatile int chat_running = 0;       // 채팅 모드 활성화 플래그
+volatile sig_atomic_t resized = 0;  // 터미널 리사이즈 감지 플래그
+volatile int chat_running = 0;      // 채팅 모드 활성화 플래그
 
 // 로비 텍스트
 static const char* lobby_text[] = {
@@ -215,7 +214,7 @@ static void cli_main(int argc, char *argv[]) {
             todos[i] = todos[i+1];
         }
         todo_count--;
-        FILE *fp = fopen(TODO_FILE,"w");
+        FILE *fp = fopen(USER_TODO_FILE,"w");
         if (fp) {
             for (int i=0;i<todo_count;i++) {
                 fprintf(fp, "%s\n", todos[i]);
