@@ -59,9 +59,12 @@
 #define MODE_QR_FULL    4
 
 WINDOW *win_time    = NULL;  // 왼쪽 상단: 시간 표시
-static WINDOW *win_custom  = NULL;  // 왼쪽 중간/하단: 로비·Chat·QR
-static WINDOW *win_todo    = NULL;  // 오른쪽 전체: ToDo 목록
-static WINDOW *win_input   = NULL;  // 맨 아래: 커맨드 입력창
+//static WINDOW *win_custom  = NULL;  // 왼쪽 중간/하단: 로비·Chat·QR
+//static WINDOW *win_todo    = NULL;  // 오른쪽 전체: ToDo 목록
+//static WINDOW *win_input   = NULL;  // 맨 아래: 커맨드 입력창
+WINDOW *win_custom  = NULL;  // 왼쪽 중간/하단: 로비·Chat·QR
+WINDOW *win_todo    = NULL;  // 오른쪽 전체: ToDo 목록
+WINDOW *win_input   = NULL;  // 맨 아래: 커맨드 입력창
 
 volatile sig_atomic_t resized = 0;   // 터미널 리사이즈 감지 플래그
 volatile int chat_running = 0;       // 채팅 모드 활성화 플래그
@@ -103,7 +106,7 @@ typedef struct {
 
 // 공통
 static void cleanup_ncurses(void);
-static void create_windows(int in_lobby);
+void create_windows(int in_lobby);
 static void print_wrapped_lines(WINDOW* win, int start_y, int max_lines, int max_cols,
                                 const char* lines[], int n);
 static void get_time_strings(char* local_buf, int len1,
@@ -917,7 +920,7 @@ static void print_wrapped_lines(WINDOW* win, int start_y, int max_lines, int max
 }
 
 // 윈도우들을 새로 생성/배치
-static void create_windows(int in_lobby) {
+void create_windows(int in_lobby) {
     int rows, cols;
     getmaxyx(stdscr, rows, cols);
 
