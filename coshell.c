@@ -39,7 +39,7 @@
 
 #include "chat.h"
 #include "todo.h"
-#include "qr.h"    // 분리된 QR 헤더
+#include "qr.h" 
 
 #define MAX_CLIENTS   5
 #define BUF_SIZE      1024
@@ -520,18 +520,25 @@ static void ui_main(void) {
 
 /* Handle ToDo mode input */
 static void handle_todo_mode(TodoState *state, int *mode) {
-    // Instructions
+    // (1) 매 프레임: 도움말과 ToDo 리스트 다시 그리기
     werase(win_custom);
     box(win_custom, 0, 0);
-    mvwprintw(win_custom, 1, 2, "To-Do Mode: Add items, 'd <num>' to delete, 'q' to quit");
+    draw_custom_help(win_custom);      // todo.c에 정의된 도움말 함수
+    werase(win_todo);
+    box(win_todo, 0, 0);
+    load_todo();                       // 파일 → 메모리 로드
+    draw_todo(win_todo);               // 메모리 → 화면 출력
     wrefresh(win_custom);
-    // Input box
+    wrefresh(win_todo);
+
+    // (2) 입력창 그리기
     werase(win_input);
     box(win_input, 0, 0);
     mvwprintw(win_input, 1, 2, "%s", state->buf);
     wmove(win_input, 1, 2 + state->len);
     wrefresh(win_input);
 
+    // (3) 입력 처리
     wtimeout(win_input, 200);
     int ch = wgetch(win_input);
     if (ch == KEY_RESIZE) {
@@ -542,58 +549,71 @@ static void handle_todo_mode(TodoState *state, int *mode) {
 
     if (ch == KEY_BACKSPACE || ch == 127) {
         if (state->len > 0) {
-            state->len--;
-            state->buf[state->len] = '\0';
+            state->buf[--state->len] = '\0';
         }
     }
     else if (ch == '\n' || ch == KEY_ENTER) {
         state->buf[state->len] = '\0';
-        if (state->len > 0) {
-            // Quit
-            if (state->buf[0] == 'q' || state->buf[0] == 'Q') {
-                *mode = MODE_LOBBY;
-                create_windows(1);
-                load_todo();
-                draw_todo(win_todo);
-            }
-            // Delete command
-            else if (state->buf[0] == 'd') {
-                int idx = -1;
-                if (strncmp(state->buf, "del ", 4) == 0) {
-                    idx = atoi(state->buf+4) - 1;
-                } else {
-                    idx = atoi(state->buf+1) - 1;
-                }
-                if (idx >= 0 && idx < todo_count) {
-                    pthread_mutex_lock(&todo_lock);
-                    free(todos[idx]);
-                    for (int i = idx; i < todo_count-1; i++) {
-                        todos[i] = todos[i+1];
-                    }
-                    todo_count--;
-                    FILE *fp = fopen(TODO_FILE,"w");
-                    if (fp) {
-                        for (int i = 0; i < todo_count; i++) {
-                            fprintf(fp, "%s\n", todos[i]);
-                        }
-                        fclose(fp);
-                    }
-                    pthread_mutex_unlock(&todo_lock);
-                    draw_todo(win_todo);
-                }
-            }
-            // Add new to-do
-            else {
-                add_todo(state->buf);
-                draw_todo(win_todo);
+        char *cmd = state->buf;
+
+        if (strcmp(cmd, "q") == 0 || strcmp(cmd, "Q") == 0) {
+            // 로비로 돌아가기
+            *mode = MODE_LOBBY;
+            create_windows(1);
+            load_todo();
+            draw_todo(win_todo);
+            return;  // 여기서 즉시 리턴하여 메인 UI 초기화 화면 유지
+        }
+        else if (strncmp(cmd, "add ", 4) == 0) {
+            add_todo(cmd + 4);
+        }
+        else if (strncmp(cmd, "done ", 5) == 0) {
+            int idx = atoi(cmd + 5);
+            done_todo(idx);
+        }
+        else if (strncmp(cmd, "undo ", 5) == 0) {
+            int idx = atoi(cmd + 5);
+            undo_todo(idx);
+        }
+        else if (strncmp(cmd, "del ", 4) == 0) {
+            int idx = atoi(cmd + 4);
+            del_todo(idx);
+        }
+        else if (strncmp(cmd, "edt ", 4) == 0) {
+            char *p = strchr(cmd + 4, ' ');
+            if (p) {
+                *p = '\0';
+                int idx = atoi(cmd + 4);
+                char *text = p + 1;
+                edit_todo(idx, text);
+            } else {
+                mvwprintw(win_custom, 8, 2, "Usage: edt <num> <new text>");
+                wrefresh(win_custom);
+                napms(1000);
             }
         }
-        // Clear buffer
+        else {
+            mvwprintw(win_custom, 8, 2, "Unknown: %s", cmd);
+            wrefresh(win_custom);
+            napms(1000);
+        }
+
+        // (4) 변경 후 다시 그리기
+        werase(win_custom);
+        box(win_custom, 0, 0);
+        draw_custom_help(win_custom);
+        load_todo();
+        draw_todo(win_todo);
+        werase(win_input);
+        box(win_input, 0, 0);
+        wrefresh(win_input);
+
+        // 입력 버퍼 초기화
         state->len = 0;
         memset(state->buf, 0, sizeof(state->buf));
     }
     else if (ch >= 32 && ch <= 126) {
-        if (state->len < (int)sizeof(state->buf)-1) {
+        if (state->len < (int)sizeof(state->buf) - 1) {
             state->buf[state->len++] = (char)ch;
         }
     }
