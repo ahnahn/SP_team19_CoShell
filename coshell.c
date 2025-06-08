@@ -818,11 +818,19 @@ static void handle_qr_input_mode(QRInputState *qr_state, int *mode) {
 
 /* Handle QR full-screen mode */
 static void handle_qr_full_mode(QRInputState *qr_state, int *mode) {
+    // 1) QR 전체화면 출력
     process_and_show_file(win_custom, qr_state->pathbuf);
-    *mode = MODE_LOBBY;
-    create_windows(1);
-    load_todo();
-    draw_todo(win_todo);
+
+    // 2) 사용자가 ‘q’를 누르면 프로그램을 다시 실행
+    endwin();   // ncurses 세션 종료
+
+    // argv[0]부터 프로그램 전체를 execvp로 덮어쓴다
+    char *argv_new[] = { "./coshell", "ui", NULL };
+    execvp(argv_new[0], argv_new);
+
+    // execvp가 실패하면 여기에 옴
+    perror("execvp failed");
+    exit(1);
 }
 
 /*==============================*/
