@@ -12,6 +12,12 @@ extern pthread_mutex_t clients_lock;
 extern int client_socks[MAX_CLIENTS];
 extern int client_count;
 
+// coshell.c 에서 제공하는 UI 리사이즈 함수
+extern void create_windows(int in_lobby);
+// 리사이즈 후 재생성된 윈도우
+extern WINDOW *win_custom;
+extern WINDOW *win_input;
+
 /*==============================*/
 /*    Chat 서버 및 클라이언트   */
 /*==============================*/
