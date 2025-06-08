@@ -39,7 +39,7 @@
 
 #include "chat.h"
 #include "todo.h"
-#include "qr.h"    // 분리된 QR 헤더
+#include "qr.h" 
 
 #define MAX_CLIENTS   5
 #define BUF_SIZE      1024
@@ -50,18 +50,20 @@
 // Chat 포트 (로컬)
 #define LOCAL_PORT    12345
 
-/*==============================*/
-/*   전역 변수 (공유 데이터)    */
-/*==============================*/
+// Mode constants
+#define MODE_LOBBY      0
+#define MODE_TODO       1
+#define MODE_CHAT       2
+#define MODE_QR_INPUT   3
+#define MODE_QR_FULL    4
 
-// ncurses 윈도우 포인터
-       WINDOW *win_time    = NULL;  // 왼쪽 상단: 시간 표시
-static WINDOW *win_custom  = NULL;  // 왼쪽 중간/하단: 로비·Chat·QR
-static WINDOW *win_todo    = NULL;  // 오른쪽 전체: ToDo 목록
-static WINDOW *win_input   = NULL;  // 맨 아래: 커맨드 입력창
+WINDOW *win_time    = NULL;  // 왼쪽 상단: 시간 표시
+WINDOW *win_custom  = NULL;  // 왼쪽 중간/하단: 로비·Chat·QR
+WINDOW *win_todo    = NULL;  // 오른쪽 전체: ToDo 목록
+WINDOW *win_input   = NULL;  // 맨 아래: 커맨드 입력창
 
-volatile sig_atomic_t resized = 0;  // 터미널 리사이즈 감지 플래그
-volatile int chat_running = 0;      // 채팅 모드 활성화 플래그
+volatile sig_atomic_t resized = 0;   // 터미널 리사이즈 감지 플래그
+volatile int chat_running = 0;       // 채팅 모드 활성화 플래그
 
 // 로비 텍스트
 static const char* lobby_text[] = {
@@ -75,13 +77,32 @@ static const char* lobby_text[] = {
 };
 static const int lobby_lines = sizeof(lobby_text)/sizeof(lobby_text[0]);
 
+// State structs for modes
+typedef struct {
+    char buf[512];
+    int len;
+} TodoState;
+
+typedef struct {
+    int step; // 0: host, 1: port, 2: nickname, 3: chat running
+    char host[128];
+    char port_str[16];
+    char nickname[64];
+    int port;
+} ChatState;
+
+typedef struct {
+    int pathlen;
+    char pathbuf[MAX_PATH_LEN + 1];
+} QRInputState;
+
 /*==============================*/
 /*        함수 전방 선언        */
 /*==============================*/
 
 // 공통
 static void cleanup_ncurses(void);
-static void create_windows(int in_lobby);
+void create_windows(int in_lobby);
 static void print_wrapped_lines(WINDOW* win, int start_y, int max_lines, int max_cols,
                                 const char* lines[], int n);
 static void get_time_strings(char* local_buf, int len1,
@@ -89,6 +110,12 @@ static void get_time_strings(char* local_buf, int len1,
                              char* uk_buf, int len3);
 static void *timer_thread_fn(void *arg);
 void update_time(WINDOW* w);
+
+// 모드 처리
+static void handle_todo_mode(TodoState *state, int *mode);
+static void handle_chat_mode(ChatState *state, int *mode);
+static void handle_qr_input_mode(QRInputState *qr_state, int *mode);
+static void handle_qr_full_mode(QRInputState *qr_state, int *mode);
 
 // 메인/UI/CLI 로직
 static void show_main_menu(void);
@@ -225,7 +252,6 @@ static void cli_main(int argc, char *argv[]) {
         printf("Deleted todo #%d\n", idx+1);
     }
     else if (strcmp(argv[0], "qr")==0 && argc==2) {
-        // CLI 모드: ASCII QR 출력
         show_qr_cli(argv[1]);
     }
     else {
@@ -241,7 +267,6 @@ static void ui_main(void) {
     atexit(cleanup_ncurses);
     signal(SIGINT, SIG_IGN);
     signal(SIGTSTP, SIG_IGN);
-    // SIGWINCH는 무시하고, KEY_RESIZE로만 처리
     signal(SIGWINCH, SIG_IGN);
 
     initscr();
@@ -252,18 +277,23 @@ static void ui_main(void) {
 
     // 첫 화면: 로비
     create_windows(1);
-    // ToDo 목록 표시 (항상 나타나도록 수정)
     load_todo();
     draw_todo(win_todo);
 
+    // State initialization
+    TodoState todo_state = { .len = 0 };
+    memset(todo_state.buf, 0, sizeof(todo_state.buf));
+    ChatState chat_state = { .step = 0, .port = 0 };
+    memset(chat_state.host, 0, sizeof(chat_state.host));
+    memset(chat_state.port_str, 0, sizeof(chat_state.port_str));
+    memset(chat_state.nickname, 0, sizeof(chat_state.nickname));
+    QRInputState qr_state = { .pathlen = 0 };
+    memset(qr_state.pathbuf, 0, sizeof(qr_state.pathbuf));
+
     char cmdbuf[MAX_CMD_LEN + 1] = {0};
     int cmdlen = 0;
-    char pathbuf[MAX_PATH_LEN + 1] = {0};
-    int pathlen = 0;
     time_t last_time = 0;
-    int mode = 0;  // 0 = 로비, 1 = ToDo, 2 = Chat, 3 = QR 입력, 4 = QR 전체화면
-
-    int input_y = 1, input_x = 11;  // “Command:” 뒤로 커서 위치 조정
+    int mode = MODE_LOBBY;  // 0 = 로비, 1 = ToDo, 2 = Chat, 3 = QR 입력, 4 = QR 전체화면
 
     while (1) {
         // (1) 매초 시간 업데이트
@@ -284,29 +314,23 @@ static void ui_main(void) {
         // ─────────────────────────────────────────────────
         if (resized) {
             resized = 0;
-            // ncurses 내부 윈도우를 모두 삭제하고 새로운 크기를 감지
             endwin();
             refresh();
             clear();
 
-            // mode == 0(로비)이면 로비 메시지 포함, 아니면 빈 화면
-            create_windows(mode == 0);
-            if (mode == 0) {
-                // 리사이즈 후 메인 UI에서도 ToDo 목록 다시 표시
+            // ncurses 내부 윈도우를 모두 삭제하고 새로운 크기를 감지
+            create_windows(mode == MODE_LOBBY);
+            if (mode == MODE_LOBBY) {
                 load_todo();
                 draw_todo(win_todo);
             }
-
-            if (mode == 1) {
-                // ToDo 모드 재진입: interactive 모드로 들어감
-                todo_enter(win_input, win_todo, win_custom);
-                mode = 0;
-                create_windows(1);
+            else if (mode == MODE_TODO) {
+                // ToDo 모드: redraw ToDo list
                 load_todo();
                 draw_todo(win_todo);
             }
-            else if (mode == 2) {
-                // Chat 모드 재진입: 안내 메시지 다시 그려줌
+            else if (mode == MODE_CHAT) {
+                // Chat 모드: 안내 메시지 다시 그려줌
                 werase(win_custom);
                 box(win_custom, 0, 0);
                 mvwprintw(win_custom, 1, 2, "Type '/quit' to end chat and return to main UI.");
@@ -315,18 +339,18 @@ static void ui_main(void) {
                 load_todo();
                 draw_todo(win_todo);
             }
-            else if (mode == 3) {
+            else if (mode == MODE_QR_INPUT) {
                 // QR 모드(경로 입력) 재진입: pathbuf 내용까지 다시 그려줌
                 werase(win_custom);
                 box(win_custom, 0, 0);
                 mvwprintw(win_custom, 1, 2, "Enter path for QR code (or 'q' to cancel):");
-                mvwprintw(win_custom, 2, 2, "%s", pathbuf);
+                mvwprintw(win_custom, 2, 2, "%s", qr_state.pathbuf);
                 wrefresh(win_custom);
 
                 werase(win_input);
                 box(win_input, 0, 0);
-                mvwprintw(win_input, 1, 2, "%s", pathbuf);
-                wmove(win_input, 1, 2 + pathlen);
+                mvwprintw(win_input, 1, 2, "%s", qr_state.pathbuf);
+                wmove(win_input, 1, 2 + qr_state.pathlen);
                 wrefresh(win_input);
 
                 load_todo();
@@ -338,85 +362,47 @@ static void ui_main(void) {
         // ─────────────────────────────────────────────────
         // (A) QR 경로 입력 모드 (mode == 3)
         // ─────────────────────────────────────────────────
-        if (mode == 3) {
-            // 도움말 표시
-            werase(win_custom);
-            box(win_custom, 0, 0);
-            mvwprintw(win_custom, 1, 2, "Enter path for QR code (or 'q' to cancel):");
-            mvwprintw(win_custom, 2, 2, "%s", pathbuf);
-            wrefresh(win_custom);
-
-            // win_input(입력창)에 pathbuf 표시 + 커서 이동
-            werase(win_input);
-            box(win_input, 0, 0);
-            mvwprintw(win_input, 1, 2, "%s", pathbuf);
-            wmove(win_input, 1, 2 + pathlen);
-            wrefresh(win_input);
-
-            // 비차단 입력(200ms) → 경로를 하나씩 받아서 pathbuf에 저장
-            wtimeout(win_input, 200);
-            int ch2 = wgetch(win_input);
-            if (ch2 != ERR) {
-                // 'q' 로 취소하면 바로 메인으로
-                if (ch2 == 'q' || ch2 == 'Q') {
-                    mode = 0;
-                    create_windows(1);
-                    load_todo();
-                    draw_todo(win_todo);
-                    continue;
-                }
-                if (ch2 == KEY_BACKSPACE || ch2 == 127) {
-                    if (pathlen > 0) {
-                        pathlen--;
-                        pathbuf[pathlen] = '\0';
-                    }
-                }
-                else if (ch2 == '\n' || ch2 == KEY_ENTER) {
-                    // Enter 치면 mode = 4 → 전체화면 QR 생성
-                    mode = 4;
-                    cmdlen = 0;
-                    memset(cmdbuf, 0, sizeof(cmdbuf));
-
-                    werase(win_input);
-                    box(win_input, 0, 0);
-                    wrefresh(win_input);
-                }
-                else if (ch2 >= 32 && ch2 <= 126) {
-                    if (pathlen < MAX_PATH_LEN) {
-                        pathbuf[pathlen++] = (char)ch2;
-                    }
-                }
-            }
+        if (mode == MODE_QR_INPUT) {
+            handle_qr_input_mode(&qr_state, &mode);
             continue;
         }
 
         // ─────────────────────────────────────────────────
         // (B) QR 전체화면 모드 (mode == 4)
         // ─────────────────────────────────────────────────
-        if (mode == 4) {
-            // 분리된 qr 모듈로 이동
-            process_and_show_file(win_custom, pathbuf);
-
-            // 전체화면 QR이 닫히면, 다시 로비 UI를 복귀시켜야 한다.
-            mode = 0;
-            create_windows(1);
-            load_todo();
-            draw_todo(win_todo);
+        if (mode == MODE_QR_FULL) {
+            handle_qr_full_mode(&qr_state, &mode);
             continue;
         }
 
         // ─────────────────────────────────────────────────
-        // (C) 나머지 모드: 로비(0) / ToDo(1) / Chat(2) / 커맨드 입력
+        // (C) ToDo 모드
+        // ─────────────────────────────────────────────────
+        if (mode == MODE_TODO) {
+            handle_todo_mode(&todo_state, &mode);
+            continue;
+        }
+
+        // ─────────────────────────────────────────────────
+        // (D) Chat 모드 (호스트/포트/닉네임 입력 및 실행)
+        // ─────────────────────────────────────────────────
+        if (mode == MODE_CHAT) {
+            handle_chat_mode(&chat_state, &mode);
+            continue;
+        }
+
+        // ─────────────────────────────────────────────────
+        // (E) 나머지 모드: 로비 (mode == 0)
         // ─────────────────────────────────────────────────
 
-        // (C-1) 입력창(Command) 그리기
+        // (E-1) 입력창(Command) 그리기
         werase(win_input);
         box(win_input, 0, 0);
         mvwprintw(win_input, 1, 2, "Command: %.*s", cmdlen, cmdbuf);
-        wmove(win_input, input_y, input_x + cmdlen);
+        wmove(win_input, 1, 11 + cmdlen);
         wrefresh(win_input);
 
-        // (C-2) 비차단으로 키 입력 받기 (200ms 대기)
+        // (E-2) 비차단으로 키 입력 받기 (200ms 대기)
         wtimeout(win_input, 200);
         int ch = wgetch(win_input);
         if (ch == KEY_RESIZE) {
@@ -442,176 +428,33 @@ static void ui_main(void) {
                 }
                 // 1 → To-Do 모드 진입
                 else if (cmdlen > 0 && cmdbuf[0] == '1') {
-                    mode = 1;
-                    todo_enter(win_input, win_todo, win_custom);
-                    mode = 0;
-                    create_windows(1);
-                    load_todo();
-                    draw_todo(win_todo);
+                    mode = MODE_TODO;
+                    todo_state.len = 0;
+                    memset(todo_state.buf, 0, sizeof(todo_state.buf));
+                    cmdlen = 0;
+                    memset(cmdbuf, 0, sizeof(cmdbuf));
+                    continue;
                 }
                 // 2 → Chat 모드 진입
                 else if (cmdlen > 0 && cmdbuf[0] == '2') {
-                    mode = 2;
-                    werase(win_custom);
-                    box(win_custom, 0, 0);
-                    mvwprintw(win_custom, 1, 2, "Enter Chat host and port:");
-                    wrefresh(win_custom);
-
-                    // (A) 호스트 입력
-                    char host[128] = {0};
-                    while (1) {
-                        werase(win_input);
-                        box(win_input, 0, 0);
-                        mvwprintw(win_input, 1, 2, "Host: ");
-                        wmove(win_input, 1, 8);
-                        wrefresh(win_input);
-
-                        wtimeout(win_input, -1);
-                        echo();
-                        flushinp();
-                        wgetnstr(win_input, host, sizeof(host) - 1);
-                        noecho();
-
-                        if (strlen(host) == 0) {
-                            werase(win_custom);
-                            box(win_custom, 0, 0);
-                            mvwprintw(win_custom, 1, 2, "Host cannot be empty. Try again.");
-                            wrefresh(win_custom);
-                            napms(1000);
-                            continue;
-                        }
-                        break;
-                    }
-
-                    // (C) 포트 입력
-                    char port_str[16] = {0};
-                    int port = 0;
-                    werase(win_custom);
-                    box(win_custom, 0, 0);
-                    mvwprintw(win_custom, 1, 2, "Enter Port Number (or 'q' to cancel):");
-                    wrefresh(win_custom);
-
-                    while (1) {
-                        werase(win_input);
-                        box(win_input, 0, 0);
-                        mvwprintw(win_input, 1, 2, "Port: ");
-                        wmove(win_input, 1, 8);
-                        wrefresh(win_input);
-
-                        wtimeout(win_input, -1);
-                        echo();
-                        flushinp();
-                        wgetnstr(win_input, port_str, sizeof(port_str) - 1);
-                        noecho();
-
-                        if (strcmp(port_str, "q") == 0 || strcmp(port_str, "Q") == 0 ||
-                            strcmp(port_str, "quit") == 0) {
-                            werase(win_custom);
-                            box(win_custom, 0, 0);
-                            mvwprintw(win_custom, 1, 2, "Cancelled Chat. Returning to main UI...");
-                            wrefresh(win_custom);
-                            napms(1000);
-                            mode = 0;
-                            create_windows(1);
-                            load_todo();
-                            draw_todo(win_todo);
-                            break;
-                        }
-
-                        if (strlen(port_str) == 0) {
-                            werase(win_custom);
-                            box(win_custom, 0, 0);
-                            mvwprintw(win_custom, 1, 2, "Port cannot be empty. Try again.");
-                            wrefresh(win_custom);
-                            napms(1000);
-                            continue;
-                        }
-                        port = atoi(port_str);
-                        if (port <= 0 || port > 65535) {
-                            werase(win_custom);
-                            box(win_custom, 0, 0);
-                            mvwprintw(win_custom, 1, 2, "Invalid port: %s. Try again (or 'q').", port_str);
-                            wrefresh(win_custom);
-                            napms(1000);
-                            continue;
-                        }
-                        break;
-                    }
-
-                    if (mode == 0) {
-                        // 사용자가 포트 입력 중 'q'로 취소했을 때
-                        memset(cmdbuf, 0, sizeof(cmdbuf));
-                        cmdlen = 0;
-                        continue;
-                    }
-
-                    // (D) 닉네임 입력
-                    char nickname[64] = {0};
-                    while (1) {
-                        werase(win_custom);
-                        box(win_custom, 0, 0);
-                        mvwprintw(win_custom, 1, 2, "Enter Nickname (no spaces):");
-                        wrefresh(win_custom);
-
-                        werase(win_input);
-                        box(win_input, 0, 0);
-                        mvwprintw(win_input, 1, 2, "Nickname: ");
-                        wmove(win_input, 1, 12);
-                        wrefresh(win_input);
-
-                        wtimeout(win_input, -1);
-                        echo();
-                        flushinp();
-                        wgetnstr(win_input, nickname, sizeof(nickname) - 1);
-                        noecho();
-
-                        if (strlen(nickname) == 0) {
-                            werase(win_custom);
-                            box(win_custom, 0, 0);
-                            mvwprintw(win_custom, 1, 2, "Nickname cannot be empty. Try again.");
-                            wrefresh(win_custom);
-                            napms(1000);
-                            continue;
-                        }
-                        break;
-                    }
-
-                    // (E) 채팅 모드 진입 전 안내 메시지
-                    werase(win_custom);
-                    box(win_custom, 0, 0);
-                    mvwprintw(win_custom, 1, 2, "Type '/quit' to end chat and return to main UI.");
-                    wrefresh(win_custom);
-
-                    // (F) 채팅 모드 진입
-                    pthread_t timer_thread_id;
-                    chat_running = 1;
-                    if (pthread_create(&timer_thread_id, NULL, timer_thread_fn, NULL) != 0) {
-                        // 실패해도 무시
-                    }
-                    chat_client(host, port, nickname, win_custom, win_input);
-                    chat_running = 0;
-                    pthread_join(timer_thread_id, NULL);
-
-                    // (G) 채팅 모드 종료 후 → 메인 UI로 복귀
-                    werase(win_custom);
-                    create_windows(1);
-                    mode = 0;
-                    load_todo();
-                    draw_todo(win_todo);
+                    mode = MODE_CHAT;
+                    chat_state.step = 0;
+                    chat_state.port = 0;
+                    memset(chat_state.host, 0, sizeof(chat_state.host));
+                    memset(chat_state.port_str, 0, sizeof(chat_state.port_str));
+                    memset(chat_state.nickname, 0, sizeof(chat_state.nickname));
+                    cmdlen = 0;
+                    memset(cmdbuf, 0, sizeof(cmdbuf));
+                    continue;
                 }
                 // 3 → QR 경로 입력 모드 진입
                 else if (cmdlen > 0 && cmdbuf[0] == '3') {
-                    mode = 3;
-                    pathlen = 0;
-                    memset(pathbuf, 0, sizeof(pathbuf));
-                    werase(win_custom);
-                    box(win_custom, 0, 0);
-                    mvwprintw(win_custom, 1, 2, "Enter path for QR code (or 'q' to cancel):");
-                    wrefresh(win_custom);
-
-                    werase(win_input);
-                    box(win_input, 0, 0);
-                    wrefresh(win_input);
+                    mode = MODE_QR_INPUT;
+                    qr_state.pathlen = 0;
+                    memset(qr_state.pathbuf, 0, sizeof(qr_state.pathbuf));
+                    cmdlen = 0;
+                    memset(cmdbuf, 0, sizeof(cmdbuf));
+                    continue;
                 }
                 // a <item> → ToDo 항목 추가 (비대화형 모드)
                 else if (cmdlen > 2 && cmdbuf[0] == 'a' && cmdbuf[1] == ' ') {
@@ -622,9 +465,7 @@ static void ui_main(void) {
                 // f <filepath> → QR 전체화면 모드 바로 실행
                 else if (cmdlen > 2 && cmdbuf[0] == 'f' && cmdbuf[1] == ' ') {
                     const char *filepath = cmdbuf + 2;
-                    // 직접 QR 전체화면 실행
                     process_and_show_file(win_custom, filepath);
-                    // 종료 후 UI 복귀
                     create_windows(1);
                     load_todo();
                     draw_todo(win_todo);
@@ -636,8 +477,6 @@ static void ui_main(void) {
                     werase(win_custom);
                     box(win_custom, 0, 0);
                     mvwprintw(win_custom, 1, 2, "Unknown command: %s", cmdbuf);
-
-                    // mode == 0 (메인 UI) 시 가능한 명령 안내
                     mvwprintw(win_custom, 3, 2, "Available commands in main UI:");
                     mvwprintw(win_custom, 4, 4, "1             : Enter To-Do mode");
                     mvwprintw(win_custom, 5, 4, "2             : Enter Chat mode");
@@ -646,10 +485,9 @@ static void ui_main(void) {
                     mvwprintw(win_custom, 8, 4, "f <filepath>  : Show QR for <filepath>");
                     mvwprintw(win_custom, 9, 4, "exit          : Exit program");
                     wrefresh(win_custom);
-
                     napms(3000);  // 3초간 표시한 뒤 자동으로 로비로 돌아감
 
-                    mode = 0;
+                    mode = MODE_LOBBY;
                     werase(win_custom);
                     box(win_custom, 0, 0);
                     int maxy, maxx;
@@ -674,6 +512,344 @@ static void ui_main(void) {
     }
 
     endwin();  // ncurses 종료
+}
+
+/* Handle ToDo mode input */
+static void handle_todo_mode(TodoState *state, int *mode) {
+    // (1) 매 프레임: 도움말과 ToDo 리스트 다시 그리기
+    werase(win_custom);
+    box(win_custom, 0, 0);
+    draw_custom_help(win_custom);      // todo.c에 정의된 도움말 함수
+    werase(win_todo);
+    box(win_todo, 0, 0);
+    load_todo();                       // 파일 → 메모리 로드
+    draw_todo(win_todo);               // 메모리 → 화면 출력
+    wrefresh(win_custom);
+    wrefresh(win_todo);
+
+    // (2) 입력창 그리기
+    werase(win_input);
+    box(win_input, 0, 0);
+    mvwprintw(win_input, 1, 2, "%s", state->buf);
+    wmove(win_input, 1, 2 + state->len);
+    wrefresh(win_input);
+
+    // (3) 입력 처리
+    wtimeout(win_input, 200);
+    int ch = wgetch(win_input);
+    if (ch == KEY_RESIZE) {
+        resized = 1;
+        return;
+    }
+    if (ch == ERR) return;
+
+    if (ch == KEY_BACKSPACE || ch == 127) {
+        if (state->len > 0) {
+            state->buf[--state->len] = '\0';
+        }
+    }
+    else if (ch == '\n' || ch == KEY_ENTER) {
+        state->buf[state->len] = '\0';
+        char *cmd = state->buf;
+
+        if (strcmp(cmd, "q") == 0 || strcmp(cmd, "Q") == 0) {
+            // 로비로 돌아가기
+            *mode = MODE_LOBBY;
+            create_windows(1);
+            load_todo();
+            draw_todo(win_todo);
+            return;  // 여기서 즉시 리턴하여 메인 UI 초기화 화면 유지
+        }
+        else if (strncmp(cmd, "add ", 4) == 0) {
+            add_todo(cmd + 4);
+        }
+        else if (strncmp(cmd, "done ", 5) == 0) {
+            int idx = atoi(cmd + 5);
+            done_todo(idx);
+        }
+        else if (strncmp(cmd, "undo ", 5) == 0) {
+            int idx = atoi(cmd + 5);
+            undo_todo(idx);
+        }
+        else if (strncmp(cmd, "del ", 4) == 0) {
+            int idx = atoi(cmd + 4);
+            del_todo(idx);
+        }
+        else if (strncmp(cmd, "edt ", 4) == 0) {
+            char *p = strchr(cmd + 4, ' ');
+            if (p) {
+                *p = '\0';
+                int idx = atoi(cmd + 4);
+                char *text = p + 1;
+                edit_todo(idx, text);
+            } else {
+                mvwprintw(win_custom, 8, 2, "Usage: edt <num> <new text>");
+                wrefresh(win_custom);
+                napms(1000);
+            }
+        }
+        else {
+            mvwprintw(win_custom, 8, 2, "Unknown: %s", cmd);
+            wrefresh(win_custom);
+            napms(1000);
+        }
+
+        // (4) 변경 후 다시 그리기
+        werase(win_custom);
+        box(win_custom, 0, 0);
+        draw_custom_help(win_custom);
+        load_todo();
+        draw_todo(win_todo);
+        werase(win_input);
+        box(win_input, 0, 0);
+        wrefresh(win_input);
+
+        // 입력 버퍼 초기화
+        state->len = 0;
+        memset(state->buf, 0, sizeof(state->buf));
+    }
+    else if (ch >= 32 && ch <= 126) {
+        if (state->len < (int)sizeof(state->buf) - 1) {
+            state->buf[state->len++] = (char)ch;
+        }
+    }
+}
+
+/* Handle Chat mode (host/port/nickname and run) */
+static void handle_chat_mode(ChatState *state, int *mode) {
+    // Step 0: Host
+    if (state->step == 0) {
+        werase(win_custom);
+        box(win_custom, 0, 0);
+        mvwprintw(win_custom, 1, 2, "Enter Chat host:");
+        wrefresh(win_custom);
+
+        werase(win_input);
+        box(win_input, 0, 0);
+        mvwprintw(win_input, 1, 2, "%s", state->host);
+        wmove(win_input, 1, 2 + strlen(state->host));
+        wrefresh(win_input);
+
+        wtimeout(win_input, 200);
+        int ch = wgetch(win_input);
+        if (ch == KEY_RESIZE) { resized = 1; return; }
+        if (ch == ERR) return;
+
+        if (ch == KEY_BACKSPACE || ch == 127) {
+            int len = strlen(state->host);
+            if (len > 0) {
+                state->host[len-1] = '\0';
+            }
+        }
+        else if (ch == '\n' || ch == KEY_ENTER) {
+            if (strlen(state->host) == 0) {
+                mvwprintw(win_custom, 2, 2, "Host cannot be empty. Try again.");
+                wrefresh(win_custom);
+                napms(1000);
+            } else {
+                state->step = 1;
+            }
+        }
+        else if (ch >= 32 && ch <= 126) {
+            int len = strlen(state->host);
+            if (len < (int)sizeof(state->host)-1) {
+                state->host[len] = (char)ch;
+                state->host[len+1] = '\0';
+            }
+        }
+    }
+    // Step 1: Port
+    else if (state->step == 1) {
+        werase(win_custom);
+        box(win_custom, 0, 0);
+        mvwprintw(win_custom, 1, 2, "Enter Chat port (or 'q' to cancel):");
+        wrefresh(win_custom);
+
+        werase(win_input);
+        box(win_input, 0, 0);
+        mvwprintw(win_input, 1, 2, "%s", state->port_str);
+        wmove(win_input, 1, 2 + strlen(state->port_str));
+        wrefresh(win_input);
+
+        wtimeout(win_input, 200);
+        int ch = wgetch(win_input);
+        if (ch == KEY_RESIZE) { resized = 1; return; }
+        if (ch == ERR) return;
+
+        if (ch == KEY_BACKSPACE || ch == 127) {
+            int len = strlen(state->port_str);
+            if (len > 0) {
+                state->port_str[len-1] = '\0';
+            }
+        }
+        else if (ch == '\n' || ch == KEY_ENTER) {
+            if (strlen(state->port_str) == 0) {
+                mvwprintw(win_custom, 2, 2, "Port cannot be empty. Try again.");
+                wrefresh(win_custom);
+                napms(1000);
+            } else if (strcmp(state->port_str, "q")==0 || strcmp(state->port_str, "Q")==0) {
+                werase(win_custom);
+                box(win_custom, 0, 0);
+                mvwprintw(win_custom, 1, 2, "Cancelled Chat. Returning to main UI...");
+                wrefresh(win_custom);
+                napms(1000);
+                *mode = MODE_LOBBY;
+                create_windows(1);
+                load_todo();
+                draw_todo(win_todo);
+            } else {
+                state->port = atoi(state->port_str);
+                if (state->port <= 0 || state->port > 65535) {
+                    mvwprintw(win_custom, 2, 2, "Invalid port. Try again (or 'q').");
+                    wrefresh(win_custom);
+                    napms(1000);
+                } else {
+                    state->step = 2;
+                }
+            }
+        }
+        else if (ch >= 32 && ch <= 126) {
+            int len = strlen(state->port_str);
+            if (len < (int)sizeof(state->port_str)-1) {
+                state->port_str[len] = (char)ch;
+                state->port_str[len+1] = '\0';
+            }
+        }
+    }
+    // Step 2: Nickname
+    else if (state->step == 2) {
+        werase(win_custom);
+        box(win_custom, 0, 0);
+        mvwprintw(win_custom, 1, 2, "Enter Nickname (no spaces):");
+        wrefresh(win_custom);
+
+        werase(win_input);
+        box(win_input, 0, 0);
+        mvwprintw(win_input, 1, 2, "%s", state->nickname);
+        wmove(win_input, 1, 2 + strlen(state->nickname));
+        wrefresh(win_input);
+
+        wtimeout(win_input, 200);
+        int ch = wgetch(win_input);
+        if (ch == KEY_RESIZE) { resized = 1; return; }
+        if (ch == ERR) return;
+
+        if (ch == KEY_BACKSPACE || ch == 127) {
+            int len = strlen(state->nickname);
+            if (len > 0) {
+                state->nickname[len-1] = '\0';
+            }
+        }
+        else if (ch == '\n' || ch == KEY_ENTER) {
+            if (strlen(state->nickname) == 0) {
+                mvwprintw(win_custom, 2, 2, "Nickname cannot be empty. Try again.");
+                wrefresh(win_custom);
+                napms(1000);
+            } else {
+                state->step = 3;
+            }
+        }
+        else if (ch >= 32 && ch <= 126) {
+            int len = strlen(state->nickname);
+            if (len < (int)sizeof(state->nickname)-1) {
+                state->nickname[len] = (char)ch;
+                state->nickname[len+1] = '\0';
+            }
+        }
+    }
+    // Step 3: Start chat client
+    else if (state->step == 3) {
+        werase(win_custom);
+        box(win_custom, 0, 0);
+        mvwprintw(win_custom, 1, 2, "Type '/quit' to end chat and return to main UI.");
+        wrefresh(win_custom);
+
+        pthread_t timer_thread_id;
+        chat_running = 1;
+        if (pthread_create(&timer_thread_id, NULL, timer_thread_fn, NULL) != 0) {
+            // 실패해도 무시
+        }
+        chat_client(state->host, state->port, state->nickname, win_custom, win_input);
+        chat_running = 0;
+        pthread_join(timer_thread_id, NULL);
+
+        // 채팅 모드 종료 후 → 메인 UI로 복귀
+        werase(win_custom);
+        create_windows(1);
+        *mode = MODE_LOBBY;
+        load_todo();
+        draw_todo(win_todo);
+
+        // Reset chat state
+        state->step = 0;
+        memset(state->host, 0, sizeof(state->host));
+        memset(state->port_str, 0, sizeof(state->port_str));
+        memset(state->nickname, 0, sizeof(state->nickname));
+    }
+}
+
+/* Handle QR path input mode */
+static void handle_qr_input_mode(QRInputState *qr_state, int *mode) {
+    werase(win_custom);
+    box(win_custom, 0, 0);
+    mvwprintw(win_custom, 1, 2, "Enter path for QR code (or 'q' to cancel):");
+    mvwprintw(win_custom, 2, 2, "%s", qr_state->pathbuf);
+    wrefresh(win_custom);
+
+    werase(win_input);
+    box(win_input, 0, 0);
+    mvwprintw(win_input, 1, 2, "%s", qr_state->pathbuf);
+    wmove(win_input, 1, 2 + qr_state->pathlen);
+    wrefresh(win_input);
+
+    wtimeout(win_input, 200);
+    int ch = wgetch(win_input);
+    if (ch == KEY_RESIZE) { resized = 1; return; }
+    if (ch == ERR) return;
+
+    if (ch == KEY_BACKSPACE || ch == 127) {
+        if (qr_state->pathlen > 0) {
+            qr_state->pathlen--;
+            qr_state->pathbuf[qr_state->pathlen] = '\0';
+        }
+    }
+    else if (ch == '\n' || ch == KEY_ENTER) {
+        if (qr_state->pathlen > 0) {
+            *mode = MODE_QR_FULL;
+            werase(win_input);
+            box(win_input, 0, 0);
+            wrefresh(win_input);
+        }
+    }
+    else if (ch == 'q' || ch == 'Q') {
+        *mode = MODE_LOBBY;
+        create_windows(1);
+        load_todo();
+        draw_todo(win_todo);
+    }
+    else if (ch >= 32 && ch <= 126) {
+        if (qr_state->pathlen < MAX_PATH_LEN) {
+            qr_state->pathbuf[qr_state->pathlen++] = (char)ch;
+            qr_state->pathbuf[qr_state->pathlen] = '\0';
+        }
+    }
+}
+
+/* Handle QR full-screen mode */
+static void handle_qr_full_mode(QRInputState *qr_state, int *mode) {
+    // 1) QR 전체화면 출력
+    process_and_show_file(win_custom, qr_state->pathbuf);
+
+    // 2) 사용자가 ‘q’를 누르면 프로그램을 다시 실행
+    endwin();   // ncurses 세션 종료
+
+    // argv[0]부터 프로그램 전체를 execvp로 덮어쓴다
+    char *argv_new[] = { "./coshell", "ui", NULL };
+    execvp(argv_new[0], argv_new);
+
+    // execvp가 실패하면 여기에 옴
+    perror("execvp failed");
+    exit(1);
 }
 
 /*==============================*/
@@ -760,7 +936,7 @@ static void print_wrapped_lines(WINDOW* win, int start_y, int max_lines, int max
 }
 
 // 윈도우들을 새로 생성/배치
-static void create_windows(int in_lobby) {
+void create_windows(int in_lobby) {
     int rows, cols;
     getmaxyx(stdscr, rows, cols);
 
