@@ -7,6 +7,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "chat.h"
+#include "todo.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,7 +27,7 @@
 extern void   create_windows(int in_lobby);
 extern WINDOW *win_custom;
 extern WINDOW *win_input;
-
+extern WINDOW   *win_todo;
 /*==============================*/
 /*   전역 변수 정의 (chat.h에서 extern)  */
 /*==============================*/
@@ -243,6 +244,8 @@ void chat_client(const char *host,
                 wprintw(win_chat_inner, "%s", chat_history[i]);
             }
             wrefresh(win_chat_inner);
+            load_todo();
+            draw_todo(win_todo);
             continue;
         }
 
