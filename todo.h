@@ -2,44 +2,54 @@
 #define TODO_H
 
 #include <pthread.h>
-#include <ncurses.h>   // draw_todo에서 WINDOW*를 사용하므로 포함
+#include <ncurses.h>
 
-#define MAX_TODO    100
-#define TODO_FILE   "tasks_personal.txt"
+#define MAX_TODO     100
 
-/* ToDo 전역 데이터 */
+//========================
+//     파일 경로 상수
+//========================
+#define USER_TODO_FILE  "todo_user.txt"
+#define TEAM_TODO_FILE  "todo_team.txt"
+
+//========================
+//     서버 기본 정보
+//========================
+#define TEAM_IP      "127.0.0.1"
+#define TEAM_PORT    56789
+
+//========================
+//    전역 ToDo 데이터
+//========================
 extern pthread_mutex_t todo_lock;
+extern char current_todo_file[256];
 extern char *todos[MAX_TODO];
-extern int todo_count;
+extern  int todo_count;
 
-/* 파일에서 ToDo 목록을 읽어서 todos[], todo_count에 채워넣는다 */
+//========================
+//  Core 기능 함수 선언
+//========================
 void load_todo();
-
-/* ncurses 창(win_todo)에 todos[] 내용을 출력 */
-void draw_todo(WINDOW *win_todo);
-
-/* 메모리 및 파일에 새로운 ToDo(item)를 추가 */
 void add_todo(const char *item);
-
-/* Todo 목록에서 index번째 항목을 완료 처리 [ ] → [x] */
 void done_todo(int index);
-
-/* Todo 목록에서 index번째 항목을 완료 취소 [x] → [ ] */
 void undo_todo(int index);
-
-/* ToDo 목록에서 index번째 항목을 삭제하고 파일을 갱신 */
 void del_todo(int index);
-
-/* Todo 목록에서 index번째 항목을 new_item으로 수정 */
 void edit_todo(int index, const char *new_item);
 
-/* Help Window 출력 */ 
+//========================
+//   UI 관련 함수 선언
+//========================
+void draw_todo(WINDOW *win_todo);
 void draw_custom_help(WINDOW *custom);
-
-/* 오류 메시지 출력 함수 */
 void show_error(WINDOW *custom, const char *fmt, ...);
-
-/* 모듈화된 ToDo 모드 진입 */
 void todo_enter(WINDOW *input, WINDOW *todo, WINDOW *custom);
+
+//========================
+//  서버 통신 함수 선언
+//========================
+int connect_todo_server(const char *ip, int port);
+void disconnect_todo_server();
+int send_todo_command(const char *cmd, char *response, size_t size);
+void parse_todo_list(const char *response);
 
 #endif // TODO_H
