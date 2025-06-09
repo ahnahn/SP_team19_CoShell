@@ -1,25 +1,25 @@
 /*
  * coshell.c
- *  - CoShell: ÅÍ¹Ì³Î ±â¹İ Çù¾÷ Åø ÅëÇÕ ±¸Çö
- *    1) ToDo ¸®½ºÆ® °ü¸®
- *    2) ½Ç½Ã°£ Ã¤ÆÃ ¼­¹ö/Å¬¶óÀÌ¾ğÆ®
- *    3) ÆÄÀÏ Àü¼Û¿ë QR ÄÚµå »ı¼º & È­¸é Ãâ·Â (ÀüÃ¼È­¸é ¸ğµå, ºĞ¸®µÈ qr.c/qr.h »ç¿ë)
- *    4) ncurses UI: ºĞÇÒ Ã¢, ¹öÆ°, ·Îºñ ¡æ ToDo/Chat/QR ÀüÈ¯
+ *  - CoShell: í„°ë¯¸ë„ ê¸°ë°˜ í˜‘ì—… íˆ´ í†µí•© êµ¬í˜„
+ *    1) ToDo ë¦¬ìŠ¤íŠ¸ ê´€ë¦¬
+ *    2) ì‹¤ì‹œê°„ ì±„íŒ… ì„œë²„/í´ë¼ì´ì–¸íŠ¸
+ *    3) íŒŒì¼ ì „ì†¡ìš© QR ì½”ë“œ ìƒì„± & í™”ë©´ ì¶œë ¥ (ì „ì²´í™”ë©´ ëª¨ë“œ, ë¶„ë¦¬ëœ qr.c/qr.h ì‚¬ìš©)
+ *    4) ncurses UI: ë¶„í•  ì°½, ë²„íŠ¼, ë¡œë¹„ â†’ ToDo/Chat/QR ì „í™˜
  *
- * ºôµå ¿¹½Ã:
+ * ë¹Œë“œ ì˜ˆì‹œ:
  *   gcc coshell.c chat.c todo_ui.c todo_core.c todo_client.c qr.c -o coshell -Wall -O2 -std=c11 -lncursesw -lpthread
  *
- * »ç¿ë ÆĞÅ°Áö (Ubuntu/Debian):
+ * ì‚¬ìš© íŒ¨í‚¤ì§€ (Ubuntu/Debian):
  *   sudo apt update
  *   sudo apt install -y libncursesw5-dev qrencode
  *
- * ½ÇÇà ¹æ½Ä:
- *   ./coshell                  # ¸Ş´º/CLI/UI ¸ğµå ¼±ÅÃ
- *   ./coshell server           # Chat ¼­¹ö (Serveo ÅÍ³Î¸µ Æ÷ÇÔ)
- *   ./coshell add <item>       # CLI ¸ğµå: ToDo Ãß°¡
- *   ./coshell list             # CLI ¸ğµå: ToDo ¸ñ·Ï Ãâ·Â
- *   ./coshell del <index>      # CLI ¸ğµå: ToDo »èÁ¦
- *   ./coshell qr <filepath>    # CLI ¸ğµå: ASCII QR Ãâ·Â
+ * ì‹¤í–‰ ë°©ì‹:
+ *   ./coshell                  # ë©”ë‰´/CLI/UI ëª¨ë“œ ì„ íƒ
+ *   ./coshell server           # Chat ì„œë²„ (Serveo í„°ë„ë§ í¬í•¨)
+ *   ./coshell add <item>       # CLI ëª¨ë“œ: ToDo ì¶”ê°€
+ *   ./coshell list             # CLI ëª¨ë“œ: ToDo ëª©ë¡ ì¶œë ¥
+ *   ./coshell del <index>      # CLI ëª¨ë“œ: ToDo ì‚­ì œ
+ *   ./coshell qr <filepath>    # CLI ëª¨ë“œ: ASCII QR ì¶œë ¥
  */
 
 #define _POSIX_C_SOURCE 200809L
@@ -47,7 +47,7 @@
 #define MAX_CMD_LEN   255
 #define MAX_PATH_LEN  511
 
- // Chat Æ÷Æ® (·ÎÄÃ)
+ // Chat í¬íŠ¸ (ë¡œì»¬)
 #define LOCAL_PORT    12345
 
 // Mode constants
@@ -56,22 +56,56 @@
 #define MODE_CHAT       2
 #define MODE_QR_INPUT   3
 #define MODE_QR_FULL    4
+#define MODE_TZ         5
 
-WINDOW* win_time = NULL;  // ¿ŞÂÊ »ó´Ü: ½Ã°£ Ç¥½Ã
-WINDOW* win_custom = NULL;  // ¿ŞÂÊ Áß°£/ÇÏ´Ü: ·Îºñ¡¤Chat¡¤QR
-WINDOW* win_todo = NULL;  // ¿À¸¥ÂÊ ÀüÃ¼: ToDo ¸ñ·Ï
-WINDOW* win_input = NULL;  // ¸Ç ¾Æ·¡: Ä¿¸Çµå ÀÔ·ÂÃ¢
+WINDOW* win_time = NULL;  // ì™¼ìª½ ìƒë‹¨: ì‹œê°„ í‘œì‹œ
+WINDOW* win_custom = NULL;  // ì™¼ìª½ ì¤‘ê°„/í•˜ë‹¨: ë¡œë¹„Â·ChatÂ·QR
+WINDOW* win_todo = NULL;  // ì˜¤ë¥¸ìª½ ì „ì²´: ToDo ëª©ë¡
+WINDOW* win_input = NULL;  // ë§¨ ì•„ë˜: ì»¤ë§¨ë“œ ì…ë ¥ì°½
 
-volatile sig_atomic_t resized = 0;   // ÅÍ¹Ì³Î ¸®»çÀÌÁî °¨Áö ÇÃ·¡±×
-volatile int chat_running = 0;       // Ã¤ÆÃ ¸ğµå È°¼ºÈ­ ÇÃ·¡±×
+volatile sig_atomic_t resized = 0;   // í„°ë¯¸ë„ ë¦¬ì‚¬ì´ì¦ˆ ê°ì§€ í”Œë˜ê·¸
+volatile int chat_running = 0;       // ì±„íŒ… ëª¨ë“œ í™œì„±í™” í”Œë˜ê·¸
 
-// ·Îºñ ÅØ½ºÆ®
+// â”€â”€â”€ TimeZone ì„¤ì •ìš© ìë£Œêµ¬ì¡° â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+typedef struct {
+    char buf[16];
+    int  len;
+} TzState;
+
+typedef struct {
+    const char *code;   // internal key (ì•ˆ ì¨ë„ ë¬´ë°©)
+    const char *label;  // í™”ë©´ì— ì°ì„ ì´ë¦„
+    int          offset;// UTCë¡œë¶€í„°ì˜ ì´ˆ ë‹¨ìœ„ ì˜¤í”„ì…‹
+} TZOption;
+
+static const TZOption tzOptions[] = {
+    { "USA_PT", "USA PT",  -8*3600 },
+    { "USA_ET", "USA ET",  -5*3600 },
+    { "UK_GMT", "UK GMT",   0      },
+    { "FR_CET", "FR CET",  +1*3600 },
+    { "RU_MSK", "RU MSK",  +3*3600 },
+    { "UAE_GST","UAE GST", +4*3600 },
+    { "IN_IST", "IN IST",   5*3600 + 30*60 },
+    { "CN_CST", "CN CST",  +8*3600 },
+    { "JP_JST", "JP JST",  +9*3600 },
+    { "AU_AEST","AU AEST", +10*3600 }
+};
+static const int tzOptionCount = sizeof(tzOptions)/sizeof(tzOptions[0]);
+
+// ê¸°ë³¸ê°’: ì²« ë²ˆì§¸(USA ET), ë‘ ë²ˆì§¸(UK GMT)
+static int  tz1_offset = tzOptions[1].offset;
+static int  tz2_offset = tzOptions[2].offset;
+static char tz1_label[16] = "USA ET";
+static char tz2_label[16] = "UK GMT";
+
+// ë¡œë¹„ í…ìŠ¤íŠ¸
 static const char* lobby_text[] = {
     "Welcome!",
     "CoShell: terminal-based collaboration toolbox.",
     "1. To-Do List Management",
     "2. Chat",
     "3. QR Code",
+    "4. Setting Time",
     "",
     "Type 'exit' to quit at any time."
 };
@@ -97,10 +131,10 @@ typedef struct {
 } QRInputState;
 
 /*==============================*/
-/*        ÇÔ¼ö Àü¹æ ¼±¾ğ        */
+/*        í•¨ìˆ˜ ì „ë°© ì„ ì–¸        */
 /*==============================*/
 
-// °øÅë
+// ê³µí†µ
 static void cleanup_ncurses(void);
 void create_windows(int in_lobby);
 static void print_wrapped_lines(WINDOW* win, int start_y, int max_lines, int max_cols,
@@ -111,25 +145,25 @@ static void get_time_strings(char* local_buf, int len1,
 static void* timer_thread_fn(void* arg);
 void update_time(WINDOW* w);
 
-// ¸ğµå Ã³¸®
+// ëª¨ë“œ ì²˜ë¦¬
 static void handle_todo_mode(TodoState* state, int* mode);
 static void handle_chat_mode(ChatState* state, int* mode);
 static void handle_qr_input_mode(QRInputState* qr_state, int* mode);
 static void handle_qr_full_mode(QRInputState* qr_state, int* mode);
-
-// ¸ŞÀÎ/UI/CLI ·ÎÁ÷
+static void handle_tz_mode(TzState* state, int* mode);
+// ë©”ì¸/UI/CLI ë¡œì§
 static void show_main_menu(void);
 static void cli_main(int argc, char* argv[]);
 static void ui_main(void);
 
-// Serveo ÅÍ³Î (Chat ¼­¹ö¿ë)
+// Serveo í„°ë„ (Chat ì„œë²„ìš©)
 static int setup_serveo_tunnel(int local_port);
 
 /*==============================*/
-/*          main ÇÔ¼ö           */
+/*          main í•¨ìˆ˜           */
 /*==============================*/
 int main(int argc, char* argv[]) {
-    setlocale(LC_ALL, "");  // ¹İµå½Ã locale ¼³Á¤ (wide char Áö¿ø)
+    setlocale(LC_ALL, "");  // ë°˜ë“œì‹œ locale ì„¤ì • (wide char ì§€ì›)
 
     if (argc == 1) {
         show_main_menu();
@@ -145,13 +179,13 @@ int main(int argc, char* argv[]) {
         ui_main();
     }
     else if (strcmp(argv[1], "server") == 0) {
-        printf(">> Serveo.net: Chat ¼­¹ö ¿ø°İ Æ÷Æ® ¿äÃ» Áß...\n");
+        printf(">> Serveo.net: Chat ì„œë²„ ì›ê²© í¬íŠ¸ ìš”ì²­ ì¤‘...\n");
         int remote_port = setup_serveo_tunnel(LOCAL_PORT);
         if (remote_port < 0) {
-            fprintf(stderr, "Serveo ÅÍ³Î ½ÇÆĞ. ·ÎÄÃ Chat ¼­¹ö¸¸ ½ÇÇà.\n");
+            fprintf(stderr, "Serveo í„°ë„ ì‹¤íŒ¨. ë¡œì»¬ Chat ì„œë²„ë§Œ ì‹¤í–‰.\n");
         }
         else {
-            printf(">> Serveo Chat ÁÖ¼Ò: serveo.net:%d ¡æ ³»ºÎ %d Æ÷Æ®\n", remote_port, LOCAL_PORT);
+            printf(">> Serveo Chat ì£¼ì†Œ: serveo.net:%d â†’ ë‚´ë¶€ %d í¬íŠ¸\n", remote_port, LOCAL_PORT);
         }
         chat_server(LOCAL_PORT);
     }
@@ -164,14 +198,14 @@ int main(int argc, char* argv[]) {
 }
 
 /*==============================*/
-/*      ¸ŞÀÎ ¸Ş´º Ãâ·Â ÇÔ¼ö     */
+/*      ë©”ì¸ ë©”ë‰´ ì¶œë ¥ í•¨ìˆ˜     */
 /*==============================*/
 static void show_main_menu(void) {
     int choice = 0;
     while (1) {
         printf("\033[H\033[J");
         printf("\n===== CoShell Main Menu =====\n");
-        printf("1. Run Chat Server (Serveo ÅÍ³Î¸µ)\n");
+        printf("1. Run Chat Server (Serveo í„°ë„ë§)\n");
         printf("2. Run Client (ToDo + Chat UI)\n");
         printf("3. Exit\n");
         printf("Select (1-3): ");
@@ -180,17 +214,17 @@ static void show_main_menu(void) {
             fprintf(stderr, "Input error.\n");
             return;
         }
-        getchar();  // °³Çà Á¦°Å
+        getchar();  // ê°œí–‰ ì œê±°
 
         if (choice == 1) {
             printf("\033[H\033[J");
-            printf("Chat server (Serveo ÅÍ³Î¸µ) ½ÇÇà Áß...\n");
+            printf("Chat server (Serveo í„°ë„ë§) ì‹¤í–‰ ì¤‘...\n");
             int remote_port = setup_serveo_tunnel(LOCAL_PORT);
             if (remote_port < 0) {
-                fprintf(stderr, "Serveo ÅÍ³Î¸µ ½ÇÆĞ. ·ÎÄÃ Chat ¼­¹ö ½ÇÇà.\n");
+                fprintf(stderr, "Serveo í„°ë„ë§ ì‹¤íŒ¨. ë¡œì»¬ Chat ì„œë²„ ì‹¤í–‰.\n");
             }
             else {
-                printf(">> Serveo Chat ÁÖ¼Ò: serveo.net:%d\n", remote_port);
+                printf(">> Serveo Chat ì£¼ì†Œ: serveo.net:%d\n", remote_port);
             }
             chat_server(LOCAL_PORT);
             break;
@@ -211,7 +245,7 @@ static void show_main_menu(void) {
 }
 
 /*==============================*/
-/*        CLI ¸ğµå ÇÔ¼ö         */
+/*        CLI ëª¨ë“œ í•¨ìˆ˜         */
 /*==============================*/
 static void cli_main(int argc, char* argv[]) {
     if (argc == 0) return;
@@ -262,7 +296,7 @@ static void cli_main(int argc, char* argv[]) {
 }
 
 /*==============================*/
-/*         UI ¸ğµå ÇÔ¼ö         */
+/*         UI ëª¨ë“œ í•¨ìˆ˜         */
 /*==============================*/
 static void ui_main(void) {
     setlocale(LC_ALL, "");
@@ -274,10 +308,10 @@ static void ui_main(void) {
     initscr();
     cbreak();
     noecho();
-    keypad(stdscr, TRUE);    // stdscr¿¡µµ KEY_RESIZE ÀÌº¥Æ®¸¦ Àü´Ş
+    keypad(stdscr, TRUE);    // stdscrì—ë„ KEY_RESIZE ì´ë²¤íŠ¸ë¥¼ ì „ë‹¬
     curs_set(1);
 
-    // Ã¹ È­¸é: ·Îºñ
+    // ì²« í™”ë©´: ë¡œë¹„
     create_windows(1);
     load_todo();
     draw_todo(win_todo);
@@ -291,48 +325,49 @@ static void ui_main(void) {
     memset(chat_state.nickname, 0, sizeof(chat_state.nickname));
     QRInputState qr_state = { .pathlen = 0 };
     memset(qr_state.pathbuf, 0, sizeof(qr_state.pathbuf));
+    TzState   tz_state = { .len = 0 };
 
     char cmdbuf[MAX_CMD_LEN + 1] = { 0 };
     int cmdlen = 0;
     time_t last_time = 0;
-    int mode = MODE_LOBBY;  // 0 = ·Îºñ, 1 = ToDo, 2 = Chat, 3 = QR ÀÔ·Â, 4 = QR ÀüÃ¼È­¸é
+    int mode = MODE_LOBBY;  // 0 = ë¡œë¹„, 1 = ToDo, 2 = Chat, 3 = QR ì…ë ¥, 4 = QR ì „ì²´í™”ë©´
 
     while (1) {
-        // (1) ¸ÅÃÊ ½Ã°£ ¾÷µ¥ÀÌÆ®
+        // (1) ë§¤ì´ˆ ì‹œê°„ ì—…ë°ì´íŠ¸
         time_t now = time(NULL);
         if (now != last_time) {
             last_time = now;
             update_time(win_time);
         }
 
-        // (2) KEY_RESIZE Ã¼Å©
+        // (2) KEY_RESIZE ì²´í¬
         wtimeout(win_input, 0);
         int tch = wgetch(win_input);
         if (tch == KEY_RESIZE) {
             resized = 1;
         }
-        // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-        // (3) ¸®»çÀÌÁî ÇÃ·¡±×°¡ ¼¼¿öÁö¸é Áï½Ã È­¸éÀ» Àç±¸¼º
-        // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // (3) ë¦¬ì‚¬ì´ì¦ˆ í”Œë˜ê·¸ê°€ ì„¸ì›Œì§€ë©´ ì¦‰ì‹œ í™”ë©´ì„ ì¬êµ¬ì„±
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (resized) {
             resized = 0;
             endwin();
             refresh();
             clear();
 
-            // ncurses ³»ºÎ À©µµ¿ì¸¦ ¸ğµÎ »èÁ¦ÇÏ°í »õ·Î¿î Å©±â¸¦ °¨Áö
+            // ncurses ë‚´ë¶€ ìœˆë„ìš°ë¥¼ ëª¨ë‘ ì‚­ì œí•˜ê³  ìƒˆë¡œìš´ í¬ê¸°ë¥¼ ê°ì§€
             create_windows(mode == MODE_LOBBY);
             if (mode == MODE_LOBBY) {
                 load_todo();
                 draw_todo(win_todo);
             }
             else if (mode == MODE_TODO) {
-                // ToDo ¸ğµå: redraw ToDo list
+                // ToDo ëª¨ë“œ: redraw ToDo list
                 load_todo();
                 draw_todo(win_todo);
             }
             else if (mode == MODE_CHAT) {
-                // Chat ¸ğµå: ¾È³» ¸Ş½ÃÁö ´Ù½Ã ±×·ÁÁÜ
+                // Chat ëª¨ë“œ: ì•ˆë‚´ ë©”ì‹œì§€ ë‹¤ì‹œ ê·¸ë ¤ì¤Œ
                 werase(win_custom);
                 box(win_custom, 0, 0);
                 mvwprintw(win_custom, 1, 2, "Type '/quit' to end chat and return to main UI.");
@@ -342,7 +377,7 @@ static void ui_main(void) {
                 draw_todo(win_todo);
             }
             else if (mode == MODE_QR_INPUT) {
-                // QR ¸ğµå(°æ·Î ÀÔ·Â) ÀçÁøÀÔ: pathbuf ³»¿ë±îÁö ´Ù½Ã ±×·ÁÁÜ
+                // QR ëª¨ë“œ(ê²½ë¡œ ì…ë ¥) ì¬ì§„ì…: pathbuf ë‚´ìš©ê¹Œì§€ ë‹¤ì‹œ ê·¸ë ¤ì¤Œ
                 werase(win_custom);
                 box(win_custom, 0, 0);
                 mvwprintw(win_custom, 1, 2, "Enter path for QR code (or 'q' to cancel):");
@@ -361,50 +396,54 @@ static void ui_main(void) {
             continue;
         }
 
-        // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-        // (A) QR °æ·Î ÀÔ·Â ¸ğµå (mode == 3)
-        // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // (A) QR ê²½ë¡œ ì…ë ¥ ëª¨ë“œ (mode == 3)
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (mode == MODE_QR_INPUT) {
             handle_qr_input_mode(&qr_state, &mode);
             continue;
         }
 
-        // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-        // (B) QR ÀüÃ¼È­¸é ¸ğµå (mode == 4)
-        // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // (B) QR ì „ì²´í™”ë©´ ëª¨ë“œ (mode == 4)
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (mode == MODE_QR_FULL) {
             handle_qr_full_mode(&qr_state, &mode);
             continue;
         }
 
-        // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-        // (C) ToDo ¸ğµå
-        // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // (C) ToDo ëª¨ë“œ
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (mode == MODE_TODO) {
             handle_todo_mode(&todo_state, &mode);
             continue;
         }
 
-        // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-        // (D) Chat ¸ğµå (È£½ºÆ®/Æ÷Æ®/´Ğ³×ÀÓ ÀÔ·Â ¹× ½ÇÇà)
-        // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // (D) Chat ëª¨ë“œ (í˜¸ìŠ¤íŠ¸/í¬íŠ¸/ë‹‰ë„¤ì„ ì…ë ¥ ë° ì‹¤í–‰)
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (mode == MODE_CHAT) {
             handle_chat_mode(&chat_state, &mode);
             continue;
         }
+        if (mode == MODE_TZ) {
+            handle_tz_mode(&tz_state, &mode);
+            continue;
+        }
 
-        // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
-        // (E) ³ª¸ÓÁö ¸ğµå: ·Îºñ (mode == 0)
-        // ¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡¦¡
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // (E) ë‚˜ë¨¸ì§€ ëª¨ë“œ: ë¡œë¹„ (mode == 0)
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-        // (E-1) ÀÔ·ÂÃ¢(Command) ±×¸®±â
+        // (E-1) ì…ë ¥ì°½(Command) ê·¸ë¦¬ê¸°
         werase(win_input);
         box(win_input, 0, 0);
         mvwprintw(win_input, 1, 2, "Command: %.*s", cmdlen, cmdbuf);
         wmove(win_input, 1, 11 + cmdlen);
         wrefresh(win_input);
 
-        // (E-2) ºñÂ÷´ÜÀ¸·Î Å° ÀÔ·Â ¹Ş±â (200ms ´ë±â)
+        // (E-2) ë¹„ì°¨ë‹¨ìœ¼ë¡œ í‚¤ ì…ë ¥ ë°›ê¸° (200ms ëŒ€ê¸°)
         wtimeout(win_input, 200);
         int ch = wgetch(win_input);
         if (ch == KEY_RESIZE) {
@@ -413,22 +452,22 @@ static void ui_main(void) {
         }
 
         if (ch != ERR) {
-            // ¹é½ºÆäÀÌ½º
+            // ë°±ìŠ¤í˜ì´ìŠ¤
             if (ch == KEY_BACKSPACE || ch == 127) {
                 if (cmdlen > 0) {
                     cmdlen--;
                     cmdbuf[cmdlen] = '\0';
                 }
             }
-            // Enter ÀÔ·Â
+            // Enter ì…ë ¥
             else if (ch == '\n' || ch == KEY_ENTER) {
                 cmdbuf[cmdlen] = '\0';
 
-                // exit ¡æ ÇÁ·Î±×·¥ Á¾·á
+                // exit â†’ í”„ë¡œê·¸ë¨ ì¢…ë£Œ
                 if (strcmp(cmdbuf, "exit") == 0) {
                     break;
                 }
-                // 1 ¡æ To-Do ¸ğµå ÁøÀÔ
+                // 1 â†’ To-Do ëª¨ë“œ ì§„ì…
                 else if (cmdlen > 0 && cmdbuf[0] == '1') {
                     mode = MODE_TODO;
                     todo_state.len = 0;
@@ -437,7 +476,7 @@ static void ui_main(void) {
                     memset(cmdbuf, 0, sizeof(cmdbuf));
                     continue;
                 }
-                // 2 ¡æ Chat ¸ğµå ÁøÀÔ
+                // 2 â†’ Chat ëª¨ë“œ ì§„ì…
                 else if (cmdlen > 0 && cmdbuf[0] == '2') {
                     mode = MODE_CHAT;
                     chat_state.step = 0;
@@ -449,7 +488,7 @@ static void ui_main(void) {
                     memset(cmdbuf, 0, sizeof(cmdbuf));
                     continue;
                 }
-                // 3 ¡æ QR °æ·Î ÀÔ·Â ¸ğµå ÁøÀÔ
+                // 3 â†’ QR ê²½ë¡œ ì…ë ¥ ëª¨ë“œ ì§„ì…
                 else if (cmdlen > 0 && cmdbuf[0] == '3') {
                     mode = MODE_QR_INPUT;
                     qr_state.pathlen = 0;
@@ -458,13 +497,24 @@ static void ui_main(void) {
                     memset(cmdbuf, 0, sizeof(cmdbuf));
                     continue;
                 }
-                // a <item> ¡æ ToDo Ç×¸ñ Ãß°¡ (ºñ´ëÈ­Çü ¸ğµå)
+                else if (cmdlen > 0 && cmdbuf[0] == '4') {
+                    mode = MODE_TZ;
+                    tz_state.len = 0;
+                    memset(tz_state.buf, 0, sizeof(tz_state.buf));
+                    cmdlen = 0;
+                    memset(cmdbuf, 0, sizeof(cmdbuf));
+                    continue;
+                }
+
+
+
+                // a <item> â†’ ToDo í•­ëª© ì¶”ê°€ (ë¹„ëŒ€í™”í˜• ëª¨ë“œ)
                 else if (cmdlen > 2 && cmdbuf[0] == 'a' && cmdbuf[1] == ' ') {
                     const char* item = cmdbuf + 2;
                     add_todo(item);
                     draw_todo(win_todo);
                 }
-                // f <filepath> ¡æ QR ÀüÃ¼È­¸é ¸ğµå ¹Ù·Î ½ÇÇà
+                // f <filepath> â†’ QR ì „ì²´í™”ë©´ ëª¨ë“œ ë°”ë¡œ ì‹¤í–‰
                 else if (cmdlen > 2 && cmdbuf[0] == 'f' && cmdbuf[1] == ' ') {
                     const char* filepath = cmdbuf + 2;
                     process_and_show_file(win_custom, filepath);
@@ -474,7 +524,7 @@ static void ui_main(void) {
                 }
                 else {
                     /*==============================*/
-                    /*    Unknown command Ã³¸®      */
+                    /*    Unknown command ì²˜ë¦¬      */
                     /*==============================*/
                     werase(win_custom);
                     box(win_custom, 0, 0);
@@ -487,7 +537,7 @@ static void ui_main(void) {
                     mvwprintw(win_custom, 8, 4, "f <filepath>  : Show QR for <filepath>");
                     mvwprintw(win_custom, 9, 4, "exit          : Exit program");
                     wrefresh(win_custom);
-                    napms(3000);  // 3ÃÊ°£ Ç¥½ÃÇÑ µÚ ÀÚµ¿À¸·Î ·Îºñ·Î µ¹¾Æ°¨
+                    napms(3000);  // 3ì´ˆê°„ í‘œì‹œí•œ ë’¤ ìë™ìœ¼ë¡œ ë¡œë¹„ë¡œ ëŒì•„ê°
 
                     mode = MODE_LOBBY;
                     werase(win_custom);
@@ -501,7 +551,7 @@ static void ui_main(void) {
                     wrefresh(win_custom);
                 }
 
-                // ÀÔ·Â ¹öÆÛ ÃÊ±âÈ­
+                // ì…ë ¥ ë²„í¼ ì´ˆê¸°í™”
                 cmdlen = 0;
                 memset(cmdbuf, 0, sizeof(cmdbuf));
             }
@@ -513,30 +563,30 @@ static void ui_main(void) {
         }
     }
 
-    endwin();  // ncurses Á¾·á
+    endwin();  // ncurses ì¢…ë£Œ
 }
 
 /* Handle ToDo mode input */
 static void handle_todo_mode(TodoState* state, int* mode) {
-    // (1) ¸Å ÇÁ·¹ÀÓ: µµ¿ò¸»°ú ToDo ¸®½ºÆ® ´Ù½Ã ±×¸®±â
+    // (1) ë§¤ í”„ë ˆì„: ë„ì›€ë§ê³¼ ToDo ë¦¬ìŠ¤íŠ¸ ë‹¤ì‹œ ê·¸ë¦¬ê¸°
     werase(win_custom);
     box(win_custom, 0, 0);
-    draw_custom_help(win_custom);      // todo.c¿¡ Á¤ÀÇµÈ µµ¿ò¸» ÇÔ¼ö
+    draw_custom_help(win_custom);      // todo.cì— ì •ì˜ëœ ë„ì›€ë§ í•¨ìˆ˜
     werase(win_todo);
     box(win_todo, 0, 0);
-    load_todo();                       // ÆÄÀÏ ¡æ ¸Ş¸ğ¸® ·Îµå
-    draw_todo(win_todo);               // ¸Ş¸ğ¸® ¡æ È­¸é Ãâ·Â
+    load_todo();                       // íŒŒì¼ â†’ ë©”ëª¨ë¦¬ ë¡œë“œ
+    draw_todo(win_todo);               // ë©”ëª¨ë¦¬ â†’ í™”ë©´ ì¶œë ¥
     wrefresh(win_custom);
     wrefresh(win_todo);
 
-    // (2) ÀÔ·ÂÃ¢ ±×¸®±â
+    // (2) ì…ë ¥ì°½ ê·¸ë¦¬ê¸°
     werase(win_input);
     box(win_input, 0, 0);
     mvwprintw(win_input, 1, 2, "%s", state->buf);
     wmove(win_input, 1, 2 + state->len);
     wrefresh(win_input);
 
-    // (3) ÀÔ·Â Ã³¸®
+    // (3) ì…ë ¥ ì²˜ë¦¬
     wtimeout(win_input, 200);
     int ch = wgetch(win_input);
     if (ch == KEY_RESIZE) {
@@ -555,12 +605,12 @@ static void handle_todo_mode(TodoState* state, int* mode) {
         char* cmd = state->buf;
 
         if (strcmp(cmd, "q") == 0 || strcmp(cmd, "Q") == 0) {
-            // ·Îºñ·Î µ¹¾Æ°¡±â
+            // ë¡œë¹„ë¡œ ëŒì•„ê°€ê¸°
             *mode = MODE_LOBBY;
             create_windows(1);
             load_todo();
             draw_todo(win_todo);
-            return;  // ¿©±â¼­ Áï½Ã ¸®ÅÏÇÏ¿© ¸ŞÀÎ UI ÃÊ±âÈ­ È­¸é À¯Áö
+            return;  // ì—¬ê¸°ì„œ ì¦‰ì‹œ ë¦¬í„´í•˜ì—¬ ë©”ì¸ UI ì´ˆê¸°í™” í™”ë©´ ìœ ì§€
         }
         else if (strcmp(cmd, "team") == 0) {
             switch_to_team_mode(win_custom, win_todo);
@@ -603,7 +653,7 @@ static void handle_todo_mode(TodoState* state, int* mode) {
             napms(1000);
         }
 
-        // (4) º¯°æ ÈÄ ´Ù½Ã ±×¸®±â
+        // (4) ë³€ê²½ í›„ ë‹¤ì‹œ ê·¸ë¦¬ê¸°
         werase(win_custom);
         box(win_custom, 0, 0);
         draw_custom_help(win_custom);
@@ -613,7 +663,7 @@ static void handle_todo_mode(TodoState* state, int* mode) {
         box(win_input, 0, 0);
         wrefresh(win_input);
 
-        // ÀÔ·Â ¹öÆÛ ÃÊ±âÈ­
+        // ì…ë ¥ ë²„í¼ ì´ˆê¸°í™”
         state->len = 0;
         memset(state->buf, 0, sizeof(state->buf));
     }
@@ -781,18 +831,18 @@ static void handle_chat_mode(ChatState* state, int* mode) {
         pthread_t timer_thread_id;
         chat_running = 1;
         if (pthread_create(&timer_thread_id, NULL, timer_thread_fn, NULL) != 0) {
-            // ½ÇÆĞÇØµµ ¹«½Ã
+            // ì‹¤íŒ¨í•´ë„ ë¬´ì‹œ
         }
         chat_client(state->host, state->port, state->nickname, win_custom, win_input);
         chat_running = 0;
         pthread_join(timer_thread_id, NULL);
 
-        // Ã¤ÆÃ ¸ğµå Á¾·á ÈÄ ¡æ ¸ŞÀÎ UI·Î º¹±Í
+        // ì±„íŒ… ëª¨ë“œ ì¢…ë£Œ í›„ â†’ ë©”ì¸ UIë¡œ ë³µê·€
         state->step = 0;
         memset(state->host, 0, sizeof(state->host));
         memset(state->port_str, 0, sizeof(state->port_str));
         memset(state->nickname, 0, sizeof(state->nickname));
-        // argv[0]ºÎÅÍ ÇÁ·Î±×·¥ ÀüÃ¼¸¦ execvp·Î µ¤¾î¾´´Ù
+        // argv[0]ë¶€í„° í”„ë¡œê·¸ë¨ ì „ì²´ë¥¼ execvpë¡œ ë®ì–´ì“´ë‹¤
         char* argv_new[] = { "./coshell", "ui", NULL };
         execvp(argv_new[0], argv_new);
 
@@ -848,23 +898,23 @@ static void handle_qr_input_mode(QRInputState* qr_state, int* mode) {
 
 /* Handle QR full-screen mode */
 static void handle_qr_full_mode(QRInputState* qr_state, int* mode) {
-    // 1) QR ÀüÃ¼È­¸é Ãâ·Â
+    // 1) QR ì „ì²´í™”ë©´ ì¶œë ¥
     process_and_show_file(win_custom, qr_state->pathbuf);
 
-    // 2) »ç¿ëÀÚ°¡ ¡®q¡¯¸¦ ´©¸£¸é ÇÁ·Î±×·¥À» ´Ù½Ã ½ÇÇà
-    endwin();   // ncurses ¼¼¼Ç Á¾·á
+    // 2) ì‚¬ìš©ìê°€ â€˜qâ€™ë¥¼ ëˆ„ë¥´ë©´ í”„ë¡œê·¸ë¨ì„ ë‹¤ì‹œ ì‹¤í–‰
+    endwin();   // ncurses ì„¸ì…˜ ì¢…ë£Œ
 
-    // argv[0]ºÎÅÍ ÇÁ·Î±×·¥ ÀüÃ¼¸¦ execvp·Î µ¤¾î¾´´Ù
+    // argv[0]ë¶€í„° í”„ë¡œê·¸ë¨ ì „ì²´ë¥¼ execvpë¡œ ë®ì–´ì“´ë‹¤
     char* argv_new[] = { "./coshell", "ui", NULL };
     execvp(argv_new[0], argv_new);
 
-    // execvp°¡ ½ÇÆĞÇÏ¸é ¿©±â¿¡ ¿È
+    // execvpê°€ ì‹¤íŒ¨í•˜ë©´ ì—¬ê¸°ì— ì˜´
     perror("execvp failed");
     exit(1);
 }
 
 /*==============================*/
-/*   ncurses ÃÊ±âÈ­/Á¤¸®/¸®»çÀÌÁî */
+/*   ncurses ì´ˆê¸°í™”/ì •ë¦¬/ë¦¬ì‚¬ì´ì¦ˆ */
 /*==============================*/
 static void cleanup_ncurses(void) {
     if (win_time) { delwin(win_time);   win_time = NULL; }
@@ -875,45 +925,54 @@ static void cleanup_ncurses(void) {
 }
 
 /*==============================*/
-/*   Time ¹®ÀÚ¿­ »ı¼º ÇÔ¼ö     */
+/*   Time ë¬¸ìì—´ ìƒì„± í•¨ìˆ˜     */
 /*==============================*/
 static void get_time_strings(char* local_buf, int len1,
-    char* us_buf, int len2,
-    char* uk_buf, int len3)
+    char* tz1_buf, int len2,
+    char* tz2_buf, int len3)
 {
     time_t t = time(NULL);
+
+    // 1) ë¡œì»¬
     struct tm tm_local = *localtime(&t);
     strftime(local_buf, len1, "%Y-%m-%d %H:%M:%S", &tm_local);
 
-    struct tm tm_us = tm_local;
-    tm_us.tm_hour -= 14;    // KST ¡æ USA ET
-    mktime(&tm_us);
-    strftime(us_buf, len2, "%Y-%m-%d %H:%M:%S (USA ET)", &tm_us);
+    // 2) ì²« ë²ˆì§¸ ì›ê²© íƒ€ì„ì¡´
+    time_t t1 = t + tz1_offset;
+    struct tm tm1 = *gmtime(&t1);
+    snprintf(tz1_buf, len2,
+        "%04d-%02d-%02d %02d:%02d:%02d (%s)",
+        tm1.tm_year + 1900, tm1.tm_mon + 1, tm1.tm_mday,
+        tm1.tm_hour, tm1.tm_min, tm1.tm_sec,
+        tz1_label);
 
-    struct tm tm_uk = tm_local;
-    tm_uk.tm_hour -= 9;     // KST ¡æ UK GMT
-    mktime(&tm_uk);
-    strftime(uk_buf, len3, "%Y-%m-%d %H:%M:%S (UK GMT)", &tm_uk);
+    // 3) ë‘ ë²ˆì§¸ ì›ê²© íƒ€ì„ì¡´
+    time_t t2 = t + tz2_offset;
+    struct tm tm2 = *gmtime(&t2);
+    snprintf(tz2_buf, len3,
+        "%04d-%02d-%02d %02d:%02d:%02d (%s)",
+        tm2.tm_year + 1900, tm2.tm_mon + 1, tm2.tm_mday,
+        tm2.tm_hour, tm2.tm_min, tm2.tm_sec,
+        tz2_label);
 }
 
+
 void update_time(WINDOW* w) {
-    char local_buf[32], us_buf[32], uk_buf[32];
+    char local_buf[32], tz1_buf[32], tz2_buf[32];
     get_time_strings(local_buf, sizeof(local_buf),
-        us_buf, sizeof(us_buf),
-        uk_buf, sizeof(uk_buf));
-    int h_time, w_time;
-    getmaxyx(w, h_time, w_time);
-    if (h_time < 5 || w_time < 20) return;
+        tz1_buf, sizeof(tz1_buf),
+        tz2_buf, sizeof(tz2_buf));
+
     werase(w);
     box(w, 0, 0);
     mvwprintw(w, 0, 2, " Time ");
     mvwprintw(w, 1, 2, "Local: %s", local_buf);
-    mvwprintw(w, 2, 2, "USA  : %s", us_buf);
-    mvwprintw(w, 3, 2, "UK   : %s", uk_buf);
+    mvwprintw(w, 2, 2, "%s: %s", tz1_label, tz1_buf);
+    mvwprintw(w, 3, 2, "%s: %s", tz2_label, tz2_buf);
     wrefresh(w);
 }
 
-// ¸ÅÃÊ À©µµ¿ìÀÇ ½Ã°£À» ¾÷µ¥ÀÌÆ®ÇØ ÁÖ´Â ½º·¹µå ÇÔ¼ö (Chat ¸ğµå¿¡¼­¸¸ »ç¿ë)
+// ë§¤ì´ˆ ìœˆë„ìš°ì˜ ì‹œê°„ì„ ì—…ë°ì´íŠ¸í•´ ì£¼ëŠ” ìŠ¤ë ˆë“œ í•¨ìˆ˜ (Chat ëª¨ë“œì—ì„œë§Œ ì‚¬ìš©)
 static void* timer_thread_fn(void* arg) {
     (void)arg;
     while (chat_running) {
@@ -923,7 +982,7 @@ static void* timer_thread_fn(void* arg) {
     return NULL;
 }
 
-// ÁÖ¾îÁø ¹®ÀÚ¿­ ¹è¿­(lines)¸¦ max_cols Æø¿¡ ¸ÂÃç win¿¡ Ãâ·Â
+// ì£¼ì–´ì§„ ë¬¸ìì—´ ë°°ì—´(lines)ë¥¼ max_cols í­ì— ë§ì¶° winì— ì¶œë ¥
 static void print_wrapped_lines(WINDOW* win, int start_y, int max_lines, int max_cols,
     const char* lines[], int n)
 {
@@ -946,46 +1005,46 @@ static void print_wrapped_lines(WINDOW* win, int start_y, int max_lines, int max
     }
 }
 
-// À©µµ¿ìµéÀ» »õ·Î »ı¼º/¹èÄ¡
+// ìœˆë„ìš°ë“¤ì„ ìƒˆë¡œ ìƒì„±/ë°°ì¹˜
 void create_windows(int in_lobby) {
     int rows, cols;
     getmaxyx(stdscr, rows, cols);
 
-    // (1) ±âÁ¸ À©µµ¿ì »èÁ¦
+    // (1) ê¸°ì¡´ ìœˆë„ìš° ì‚­ì œ
     if (win_time) { delwin(win_time);   win_time = NULL; }
     if (win_custom) { delwin(win_custom); win_custom = NULL; }
     if (win_todo) { delwin(win_todo);   win_todo = NULL; }
     if (win_input) { delwin(win_input);  win_input = NULL; }
 
-    // (2) Å©±â °è»ê
+    // (2) í¬ê¸° ê³„ì‚°
     int left_width = cols / 2;
     int right_width = cols - left_width;
     int left_height = rows - INPUT_HEIGHT;
     int title_height = 1;
-    int time_height = 5;    // border(2) + ¶óº§(1) + ½Ã°£ 3ÁÙ = 5
+    int time_height = 5;    // border(2) + ë¼ë²¨(1) + ì‹œê°„ 3ì¤„ = 5
     int custom_y = title_height + time_height;
     int custom_height = left_height - custom_y;
     if (custom_height < 1) custom_height = 1;
 
-    // (3) »ó´Ü Å¸ÀÌÆ²
+    // (3) ìƒë‹¨ íƒ€ì´í‹€
     mvprintw(0, 0, "<< CoShell >> Beta");
     refresh();
 
-    // (4) ¿ŞÂÊ »ó´Ü: Time Ç¥½Ã Ã¢
+    // (4) ì™¼ìª½ ìƒë‹¨: Time í‘œì‹œ ì°½
     win_time = newwin(time_height, left_width, title_height, 0);
-    // (5) ¿ŞÂÊ Áß°£/ÇÏ´Ü: ·Îºñ ¶Ç´Â ¸ğµå ÄÜÅÙÃ÷
+    // (5) ì™¼ìª½ ì¤‘ê°„/í•˜ë‹¨: ë¡œë¹„ ë˜ëŠ” ëª¨ë“œ ì½˜í…ì¸ 
     win_custom = newwin(custom_height, left_width, custom_y, 0);
-    // (6) ¿À¸¥ÂÊ ÀüÃ¼: ToDoList Ã¢
+    // (6) ì˜¤ë¥¸ìª½ ì „ì²´: ToDoList ì°½
     win_todo = newwin(rows - INPUT_HEIGHT, right_width, 0, left_width);
-    // (7) ¸Ç ¾Æ·¡: Command ÀÔ·ÂÃ¢
+    // (7) ë§¨ ì•„ë˜: Command ì…ë ¥ì°½
     win_input = newwin(INPUT_HEIGHT, cols, rows - INPUT_HEIGHT, 0);
 
-    // (8) ½ºÅ©·Ñ ¼³Á¤
+    // (8) ìŠ¤í¬ë¡¤ ì„¤ì •
     scrollok(win_time, FALSE);
     scrollok(win_custom, TRUE);
     scrollok(win_todo, TRUE);
 
-    // (9) Time Ã¢ ÃÊ±âÈ­
+    // (9) Time ì°½ ì´ˆê¸°í™”
     box(win_time, 0, 0);
     mvwprintw(win_time, 0, 2, " Time ");
     mvwprintw(win_time, 1, 2, "Local:    --:--:--");
@@ -993,7 +1052,7 @@ void create_windows(int in_lobby) {
     mvwprintw(win_time, 3, 2, "UK   :    --:--:--");
     wrefresh(win_time);
 
-    // (10) Custom Ã¢(·Îºñ ¶Ç´Â ¸ğµå)
+    // (10) Custom ì°½(ë¡œë¹„ ë˜ëŠ” ëª¨ë“œ)
     box(win_custom, 0, 0);
     if (in_lobby) {
         int maxy, maxx;
@@ -1005,19 +1064,19 @@ void create_windows(int in_lobby) {
     }
     wrefresh(win_custom);
 
-    // (11) ToDoList Ã¢ ÃÊ±âÈ­
+    // (11) ToDoList ì°½ ì´ˆê¸°í™”
     box(win_todo, 0, 0);
     mvwprintw(win_todo, 1, 2, "=== ToDo List ===");
     wrefresh(win_todo);
 
-    // (12) ÀÔ·ÂÃ¢ ÃÊ±âÈ­
+    // (12) ì…ë ¥ì°½ ì´ˆê¸°í™”
     box(win_input, 0, 0);
     mvwprintw(win_input, 1, 2, "Command: ");
     wrefresh(win_input);
 }
 
 /*==============================*/
-/*   Serveo ÅÍ³Î (Chat ¼­¹ö¿ë)  */
+/*   Serveo í„°ë„ (Chat ì„œë²„ìš©)  */
 /*==============================*/
 static int setup_serveo_tunnel(int local_port) {
     int pipe_fd[2];
@@ -1051,12 +1110,88 @@ static int setup_serveo_tunnel(int local_port) {
         int remote_port = -1;
         while (fgets(line, sizeof(line), fp)) {
             if (sscanf(line, "Allocated port %d", &remote_port) == 1) {
-                printf(">> Serveo ÅÍ³Î ÇÒ´ç ¿Ï·á: serveo.net:%d\n", remote_port);
+                printf(">> Serveo í„°ë„ í• ë‹¹ ì™„ë£Œ: serveo.net:%d\n", remote_port);
                 fflush(stdout);
                 break;
             }
         }
         fclose(fp);
         return remote_port;
+    }
+}
+
+
+static void handle_tz_mode(TzState* state, int* mode) {
+    int row = 1;
+    werase(win_custom);
+    box(win_custom, 0, 0);
+    mvwprintw(win_custom, row++, 2, "4. Setting TimeZone");
+    mvwprintw(win_custom, row++, 2, "Usage: <slot> <option#>  (slot:1 or 2)");
+    mvwprintw(win_custom, row++, 2, "or 'q' to cancel");
+    mvwprintw(win_custom, row++, 2, "Available options:");
+    for (int i = 0; i < tzOptionCount; i++) {
+        mvwprintw(win_custom, row++, 2, "%2d. %s", i + 1, tzOptions[i].label);
+    }
+    mvwprintw(win_custom, row++, 2, "%s", state->buf);
+    wrefresh(win_custom);
+
+    // ì…ë ¥ì°½
+    werase(win_input);
+    box(win_input, 0, 0);
+    mvwprintw(win_input, 1, 2, "%s", state->buf);
+    wmove(win_input, 1, 2 + state->len);
+    wrefresh(win_input);
+
+    wtimeout(win_input, 200);
+    int ch = wgetch(win_input);
+    if (ch == KEY_RESIZE) { resized = 1; return; }
+    if (ch == ERR)        return;
+
+    if (ch == KEY_BACKSPACE || ch == 127) {
+        if (state->len > 0) state->buf[--state->len] = '\0';
+    }
+    else if (ch == '\n' || ch == KEY_ENTER) {
+        if (state->len == 0) return;
+        if (state->buf[0] == 'q' || state->buf[0] == 'Q') {
+            *mode = MODE_LOBBY;
+            create_windows(1);
+            load_todo(); draw_todo(win_todo);
+            return;
+        }
+        // tokenizing
+        char tmp[16];
+        strcpy(tmp, state->buf);
+        int slot, opt;
+        if (sscanf(tmp, "%d %d", &slot, &opt) == 2
+            && (slot == 1 || slot == 2) && opt >= 1 && opt <= tzOptionCount) {
+            // ì ìš©
+            if (slot == 1) {
+                tz1_offset = tzOptions[opt - 1].offset;
+                strncpy(tz1_label, tzOptions[opt - 1].label, sizeof(tz1_label));
+            }
+            else {
+                tz2_offset = tzOptions[opt - 1].offset;
+                strncpy(tz2_label, tzOptions[opt - 1].label, sizeof(tz2_label));
+            }
+            mvwprintw(win_custom, row + 1, 2, "Slot %d set to %s", slot, tzOptions[opt - 1].label);
+            wrefresh(win_custom);
+            napms(1000);
+            *mode = MODE_LOBBY;
+            create_windows(1);
+            load_todo(); draw_todo(win_todo);
+        }
+        else {
+            mvwprintw(win_custom, row + 1, 2, "Invalid input. Try again.");
+            wrefresh(win_custom);
+            napms(1000);
+            state->len = 0;
+            state->buf[0] = '\0';
+        }
+    }
+    else if (ch >= 32 && ch <= 126) {
+        if (state->len < (int)sizeof(state->buf) - 1) {
+            state->buf[state->len++] = (char)ch;
+            state->buf[state->len] = '\0';
+        }
     }
 }
