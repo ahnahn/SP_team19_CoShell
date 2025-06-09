@@ -24,17 +24,7 @@
 extern pthread_mutex_t todo_lock;
 extern char current_todo_file[256];
 extern char *todos[MAX_TODO];
-extern  int todo_count;
-
-//========================
-//  Core 기능 함수 선언
-//========================
-void load_todo();
-void add_todo(const char *item);
-void done_todo(int index);
-void undo_todo(int index);
-void del_todo(int index);
-void edit_todo(int index, const char *new_item);
+extern int todo_count;
 
 //========================
 //   UI 관련 함수 선언
@@ -42,7 +32,20 @@ void edit_todo(int index, const char *new_item);
 void draw_todo(WINDOW *win_todo);
 void draw_custom_help(WINDOW *custom);
 void show_error(WINDOW *custom, const char *fmt, ...);
-void todo_enter(WINDOW *input, WINDOW *todo, WINDOW *custom);
+int  switch_to_team_mode(WINDOW *custom, WINDOW *todo);
+void switch_to_user_mode(WINDOW *custom, WINDOW *todo);
+
+//========================
+//   Core 기능 함수 선언
+//========================
+void load_todo();
+void add_todo(const char *item);
+void done_todo(int index);
+void undo_todo(int index);
+void del_todo(int index);
+void edit_todo(int index, const char *new_item);
+void save_todo_to_file();
+void set_todo_mode(int is_team_mode);
 
 //========================
 //  서버 통신 함수 선언
@@ -53,3 +56,4 @@ int send_todo_command(const char *cmd, char *response, size_t size);
 void parse_todo_list(const char *response);
 
 #endif // TODO_H
+
