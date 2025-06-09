@@ -780,17 +780,14 @@ static void handle_chat_mode(ChatState *state, int *mode) {
         pthread_join(timer_thread_id, NULL);
 
         // 채팅 모드 종료 후 → 메인 UI로 복귀
-        werase(win_custom);
-        create_windows(1);
-        *mode = MODE_LOBBY;
-        load_todo();
-        draw_todo(win_todo);
-
-        // Reset chat state
         state->step = 0;
         memset(state->host, 0, sizeof(state->host));
         memset(state->port_str, 0, sizeof(state->port_str));
         memset(state->nickname, 0, sizeof(state->nickname));
+        // argv[0]부터 프로그램 전체를 execvp로 덮어쓴다
+        char *argv_new[] = { "./coshell", "ui", NULL };
+        execvp(argv_new[0], argv_new);
+
     }
 }
 
