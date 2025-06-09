@@ -560,6 +560,12 @@ static void handle_todo_mode(TodoState *state, int *mode) {
             draw_todo(win_todo);
             return;  // 여기서 즉시 리턴하여 메인 UI 초기화 화면 유지
         }
+	else if (strcmp(cmd, "team") == 0) {
+            switch_to_team_mode(win_custom, win_todo);
+        }
+        else if (strcmp(cmd, "user") == 0) {
+            switch_to_user_mode(win_custom, win_todo);
+        }
         else if (strncmp(cmd, "add ", 4) == 0) {
             add_todo(cmd + 4);
         }
@@ -575,11 +581,11 @@ static void handle_todo_mode(TodoState *state, int *mode) {
             int idx = atoi(cmd + 4);
             del_todo(idx);
         }
-        else if (strncmp(cmd, "edt ", 4) == 0) {
-            char *p = strchr(cmd + 4, ' ');
+        else if (strncmp(cmd, "edit ", 5) == 0) {
+            char *p = strchr(cmd + 5, ' ');
             if (p) {
                 *p = '\0';
-                int idx = atoi(cmd + 4);
+                int idx = atoi(cmd + 5);
                 char *text = p + 1;
                 edit_todo(idx, text);
             } else {
