@@ -40,6 +40,8 @@
 #include "chat.h"
 #include "todo.h"
 #include "qr.h" 
+#include"todo_server.h"
+
 
 #define MAX_CLIENTS   5
 #define BUF_SIZE      1024
@@ -47,7 +49,7 @@
 #define MAX_CMD_LEN   255
 #define MAX_PATH_LEN  511
 
-// Chat 포트 (로컬)
+ // Chat 포트 (로컬)
 #define LOCAL_PORT    12345
 
 // Mode constants
@@ -56,14 +58,47 @@
 #define MODE_CHAT       2
 #define MODE_QR_INPUT   3
 #define MODE_QR_FULL    4
+#define MODE_TZ         5
 
-WINDOW *win_time    = NULL;  // 왼쪽 상단: 시간 표시
-WINDOW *win_custom  = NULL;  // 왼쪽 중간/하단: 로비·Chat·QR
-WINDOW *win_todo    = NULL;  // 오른쪽 전체: ToDo 목록
-WINDOW *win_input   = NULL;  // 맨 아래: 커맨드 입력창
+WINDOW* win_time = NULL;  // 왼쪽 상단: 시간 표시
+WINDOW* win_custom = NULL;  // 왼쪽 중간/하단: 로비·Chat·QR
+WINDOW* win_todo = NULL;  // 오른쪽 전체: ToDo 목록
+WINDOW* win_input = NULL;  // 맨 아래: 커맨드 입력창
 
 volatile sig_atomic_t resized = 0;   // 터미널 리사이즈 감지 플래그
 volatile int chat_running = 0;       // 채팅 모드 활성화 플래그
+
+// ─── TimeZone 설정용 자료구조 ─────────────────
+typedef struct {
+    char buf[16];
+    int  len;
+} TzState;
+
+typedef struct {
+    const char *code;   // internal key (안 써도 무방)
+    const char *label;  // 화면에 찍을 이름
+    int          offset;// UTC로부터의 초 단위 오프셋
+} TZOption;
+
+static const TZOption tzOptions[] = {
+    { "USA_PT", "USA PT",  -8*3600 },
+    { "USA_ET", "USA ET",  -5*3600 },
+    { "UK_GMT", "UK GMT",   0      },
+    { "FR_CET", "FR CET",  +1*3600 },
+    { "RU_MSK", "RU MSK",  +3*3600 },
+    { "UAE_GST","UAE GST", +4*3600 },
+    { "IN_IST", "IN IST",   5*3600 + 30*60 },
+    { "CN_CST", "CN CST",  +8*3600 },
+    { "JP_JST", "JP JST",  +9*3600 },
+    { "AU_AEST","AU AEST", +10*3600 }
+};
+static const int tzOptionCount = sizeof(tzOptions)/sizeof(tzOptions[0]);
+
+// 기본값: 첫 번째(USA ET), 두 번째(UK GMT)
+static int  tz1_offset = tzOptions[1].offset;
+static int  tz2_offset = tzOptions[2].offset;
+static char tz1_label[16] = "USA ET";
+static char tz2_label[16] = "UK GMT";
 
 // 로비 텍스트
 static const char* lobby_text[] = {
@@ -72,10 +107,11 @@ static const char* lobby_text[] = {
     "1. To-Do List Management",
     "2. Chat",
     "3. QR Code",
+    "4. Setting Time",
     "",
     "Type 'exit' to quit at any time."
 };
-static const int lobby_lines = sizeof(lobby_text)/sizeof(lobby_text[0]);
+static const int lobby_lines = sizeof(lobby_text) / sizeof(lobby_text[0]);
 
 // State structs for modes
 typedef struct {
@@ -104,22 +140,22 @@ typedef struct {
 static void cleanup_ncurses(void);
 void create_windows(int in_lobby);
 static void print_wrapped_lines(WINDOW* win, int start_y, int max_lines, int max_cols,
-                                const char* lines[], int n);
+    const char* lines[], int n);
 static void get_time_strings(char* local_buf, int len1,
-                             char* us_buf, int len2,
-                             char* uk_buf, int len3);
-static void *timer_thread_fn(void *arg);
+    char* us_buf, int len2,
+    char* uk_buf, int len3);
+static void* timer_thread_fn(void* arg);
 void update_time(WINDOW* w);
 
 // 모드 처리
-static void handle_todo_mode(TodoState *state, int *mode);
-static void handle_chat_mode(ChatState *state, int *mode);
-static void handle_qr_input_mode(QRInputState *qr_state, int *mode);
-static void handle_qr_full_mode(QRInputState *qr_state, int *mode);
-
+static void handle_todo_mode(TodoState* state, int* mode);
+static void handle_chat_mode(ChatState* state, int* mode);
+static void handle_qr_input_mode(QRInputState* qr_state, int* mode);
+static void handle_qr_full_mode(QRInputState* qr_state, int* mode);
+static void handle_tz_mode(TzState* state, int* mode);
 // 메인/UI/CLI 로직
 static void show_main_menu(void);
-static void cli_main(int argc, char *argv[]);
+static void cli_main(int argc, char* argv[]);
 static void ui_main(void);
 
 // Serveo 터널 (Chat 서버용)
@@ -128,30 +164,34 @@ static int setup_serveo_tunnel(int local_port);
 /*==============================*/
 /*          main 함수           */
 /*==============================*/
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     setlocale(LC_ALL, "");  // 반드시 locale 설정 (wide char 지원)
 
     if (argc == 1) {
         show_main_menu();
     }
     else if (strcmp(argv[1], "add") == 0 ||
-             strcmp(argv[1], "list")== 0 ||
-             strcmp(argv[1], "del") == 0 ||
-             strcmp(argv[1], "qr")  == 0)
+        strcmp(argv[1], "list") == 0 ||
+        strcmp(argv[1], "del") == 0 ||
+        strcmp(argv[1], "qr") == 0)
     {
-        cli_main(argc-1, &argv[1]);
+        cli_main(argc - 1, &argv[1]);
     }
     else if (strcmp(argv[1], "ui") == 0) {
-        ui_main();
+        start_todo_server(TODO_SERVER_PORT);
+	ui_main();
     }
     else if (strcmp(argv[1], "server") == 0) {
         printf(">> Serveo.net: Chat 서버 원격 포트 요청 중...\n");
         int remote_port = setup_serveo_tunnel(LOCAL_PORT);
         if (remote_port < 0) {
             fprintf(stderr, "Serveo 터널 실패. 로컬 Chat 서버만 실행.\n");
-        } else {
+        }
+        else {
             printf(">> Serveo Chat 주소: serveo.net:%d → 내부 %d 포트\n", remote_port, LOCAL_PORT);
         }
+	start_todo_server(TODO_SERVER_PORT);
+
         chat_server(LOCAL_PORT);
     }
     else {
@@ -175,7 +215,7 @@ static void show_main_menu(void) {
         printf("3. Exit\n");
         printf("Select (1-3): ");
 
-        if (scanf("%d", &choice)!=1) {
+        if (scanf("%d", &choice) != 1) {
             fprintf(stderr, "Input error.\n");
             return;
         }
@@ -187,13 +227,20 @@ static void show_main_menu(void) {
             int remote_port = setup_serveo_tunnel(LOCAL_PORT);
             if (remote_port < 0) {
                 fprintf(stderr, "Serveo 터널링 실패. 로컬 Chat 서버 실행.\n");
-            } else {
-                printf(">> Serveo Chat 주소: serveo.net:%d\n", remote_port);
             }
+            else {
+                printf(">> Serveo Chat 주소: serveo.net:%d\n", remote_port);
+            
+	    }
+	    start_todo_server(TODO_SERVER_PORT);
+
+
             chat_server(LOCAL_PORT);
             break;
         }
         else if (choice == 2) {
+            
+	    start_todo_server(TODO_SERVER_PORT);
             ui_main();
             break;
         }
@@ -211,47 +258,47 @@ static void show_main_menu(void) {
 /*==============================*/
 /*        CLI 모드 함수         */
 /*==============================*/
-static void cli_main(int argc, char *argv[]) {
+static void cli_main(int argc, char* argv[]) {
     if (argc == 0) return;
     load_todo();
 
-    if (strcmp(argv[0], "list")==0) {
-        for (int i=0;i<todo_count;i++) {
-            printf("%d. %s\n", i+1, todos[i]);
+    if (strcmp(argv[0], "list") == 0) {
+        for (int i = 0;i < todo_count;i++) {
+            printf("%d. %s\n", i + 1, todos[i]);
         }
     }
-    else if (strcmp(argv[0], "add")==0 && argc>=2) {
-        char buf[512] = {0};
-        for (int i=1;i<argc;i++) {
+    else if (strcmp(argv[0], "add") == 0 && argc >= 2) {
+        char buf[512] = { 0 };
+        for (int i = 1;i < argc;i++) {
             strcat(buf, argv[i]);
-            if (i<argc-1) strcat(buf," ");
+            if (i < argc - 1) strcat(buf, " ");
         }
         add_todo(buf);
         printf("Added: %s\n", buf);
     }
-    else if (strcmp(argv[0], "del")==0 && argc==2) {
+    else if (strcmp(argv[0], "del") == 0 && argc == 2) {
         int idx = atoi(argv[1]) - 1;
-        if (idx<0 || idx>=todo_count) {
+        if (idx < 0 || idx >= todo_count) {
             printf("Invalid index.\n");
             return;
         }
         pthread_mutex_lock(&todo_lock);
         free(todos[idx]);
-        for (int i=idx;i<todo_count-1;i++) {
-            todos[i] = todos[i+1];
+        for (int i = idx;i < todo_count - 1;i++) {
+            todos[i] = todos[i + 1];
         }
         todo_count--;
-        FILE *fp = fopen(USER_TODO_FILE,"w");
+        FILE* fp = fopen(USER_TODO_FILE, "w");
         if (fp) {
-            for (int i=0;i<todo_count;i++) {
+            for (int i = 0;i < todo_count;i++) {
                 fprintf(fp, "%s\n", todos[i]);
             }
             fclose(fp);
         }
         pthread_mutex_unlock(&todo_lock);
-        printf("Deleted todo #%d\n", idx+1);
+        printf("Deleted todo #%d\n", idx + 1);
     }
-    else if (strcmp(argv[0], "qr")==0 && argc==2) {
+    else if (strcmp(argv[0], "qr") == 0 && argc == 2) {
         show_qr_cli(argv[1]);
     }
     else {
@@ -289,8 +336,9 @@ static void ui_main(void) {
     memset(chat_state.nickname, 0, sizeof(chat_state.nickname));
     QRInputState qr_state = { .pathlen = 0 };
     memset(qr_state.pathbuf, 0, sizeof(qr_state.pathbuf));
+    TzState   tz_state = { .len = 0 };
 
-    char cmdbuf[MAX_CMD_LEN + 1] = {0};
+    char cmdbuf[MAX_CMD_LEN + 1] = { 0 };
     int cmdlen = 0;
     time_t last_time = 0;
     int mode = MODE_LOBBY;  // 0 = 로비, 1 = ToDo, 2 = Chat, 3 = QR 입력, 4 = QR 전체화면
@@ -390,6 +438,10 @@ static void ui_main(void) {
             handle_chat_mode(&chat_state, &mode);
             continue;
         }
+        if (mode == MODE_TZ) {
+            handle_tz_mode(&tz_state, &mode);
+            continue;
+        }
 
         // ─────────────────────────────────────────────────
         // (E) 나머지 모드: 로비 (mode == 0)
@@ -456,15 +508,26 @@ static void ui_main(void) {
                     memset(cmdbuf, 0, sizeof(cmdbuf));
                     continue;
                 }
+                else if (cmdlen > 0 && cmdbuf[0] == '4') {
+                    mode = MODE_TZ;
+                    tz_state.len = 0;
+                    memset(tz_state.buf, 0, sizeof(tz_state.buf));
+                    cmdlen = 0;
+                    memset(cmdbuf, 0, sizeof(cmdbuf));
+                    continue;
+                }
+
+
+
                 // a <item> → ToDo 항목 추가 (비대화형 모드)
                 else if (cmdlen > 2 && cmdbuf[0] == 'a' && cmdbuf[1] == ' ') {
-                    const char *item = cmdbuf + 2;
+                    const char* item = cmdbuf + 2;
                     add_todo(item);
                     draw_todo(win_todo);
                 }
                 // f <filepath> → QR 전체화면 모드 바로 실행
                 else if (cmdlen > 2 && cmdbuf[0] == 'f' && cmdbuf[1] == ' ') {
-                    const char *filepath = cmdbuf + 2;
+                    const char* filepath = cmdbuf + 2;
                     process_and_show_file(win_custom, filepath);
                     create_windows(1);
                     load_todo();
@@ -493,9 +556,9 @@ static void ui_main(void) {
                     int maxy, maxx;
                     getmaxyx(win_custom, maxy, maxx);
                     int inner_lines = maxy - 2;
-                    int inner_cols  = maxx - 4;
+                    int inner_cols = maxx - 4;
                     print_wrapped_lines(win_custom, 1, inner_lines, inner_cols,
-                                        lobby_text, lobby_lines);
+                        lobby_text, lobby_lines);
                     wrefresh(win_custom);
                 }
 
@@ -512,10 +575,14 @@ static void ui_main(void) {
     }
 
     endwin();  // ncurses 종료
+	  endwin();
+	  echo();
+	  nocbreak();
+	  curs_set(1);
 }
 
 /* Handle ToDo mode input */
-static void handle_todo_mode(TodoState *state, int *mode) {
+static void handle_todo_mode(TodoState* state, int* mode) {
     // (1) 매 프레임: 도움말과 ToDo 리스트 다시 그리기
     werase(win_custom);
     box(win_custom, 0, 0);
@@ -550,7 +617,7 @@ static void handle_todo_mode(TodoState *state, int *mode) {
     }
     else if (ch == '\n' || ch == KEY_ENTER) {
         state->buf[state->len] = '\0';
-        char *cmd = state->buf;
+        char* cmd = state->buf;
 
         if (strcmp(cmd, "q") == 0 || strcmp(cmd, "Q") == 0) {
             // 로비로 돌아가기
@@ -560,7 +627,7 @@ static void handle_todo_mode(TodoState *state, int *mode) {
             draw_todo(win_todo);
             return;  // 여기서 즉시 리턴하여 메인 UI 초기화 화면 유지
         }
-	else if (strcmp(cmd, "team") == 0) {
+        else if (strcmp(cmd, "team") == 0) {
             switch_to_team_mode(win_custom, win_todo);
         }
         else if (strcmp(cmd, "user") == 0) {
@@ -582,13 +649,14 @@ static void handle_todo_mode(TodoState *state, int *mode) {
             del_todo(idx);
         }
         else if (strncmp(cmd, "edit ", 5) == 0) {
-            char *p = strchr(cmd + 5, ' ');
+            char* p = strchr(cmd + 5, ' ');
             if (p) {
                 *p = '\0';
                 int idx = atoi(cmd + 5);
-                char *text = p + 1;
+                char* text = p + 1;
                 edit_todo(idx, text);
-            } else {
+            }
+            else {
                 mvwprintw(win_custom, 8, 2, "Usage: edt <num> <new text>");
                 wrefresh(win_custom);
                 napms(1000);
@@ -622,7 +690,7 @@ static void handle_todo_mode(TodoState *state, int *mode) {
 }
 
 /* Handle Chat mode (host/port/nickname and run) */
-static void handle_chat_mode(ChatState *state, int *mode) {
+static void handle_chat_mode(ChatState* state, int* mode) {
     // Step 0: Host
     if (state->step == 0) {
         werase(win_custom);
@@ -644,7 +712,7 @@ static void handle_chat_mode(ChatState *state, int *mode) {
         if (ch == KEY_BACKSPACE || ch == 127) {
             int len = strlen(state->host);
             if (len > 0) {
-                state->host[len-1] = '\0';
+                state->host[len - 1] = '\0';
             }
         }
         else if (ch == '\n' || ch == KEY_ENTER) {
@@ -652,15 +720,16 @@ static void handle_chat_mode(ChatState *state, int *mode) {
                 mvwprintw(win_custom, 2, 2, "Host cannot be empty. Try again.");
                 wrefresh(win_custom);
                 napms(1000);
-            } else {
+            }
+            else {
                 state->step = 1;
             }
         }
         else if (ch >= 32 && ch <= 126) {
             int len = strlen(state->host);
-            if (len < (int)sizeof(state->host)-1) {
+            if (len < (int)sizeof(state->host) - 1) {
                 state->host[len] = (char)ch;
-                state->host[len+1] = '\0';
+                state->host[len + 1] = '\0';
             }
         }
     }
@@ -685,7 +754,7 @@ static void handle_chat_mode(ChatState *state, int *mode) {
         if (ch == KEY_BACKSPACE || ch == 127) {
             int len = strlen(state->port_str);
             if (len > 0) {
-                state->port_str[len-1] = '\0';
+                state->port_str[len - 1] = '\0';
             }
         }
         else if (ch == '\n' || ch == KEY_ENTER) {
@@ -693,7 +762,8 @@ static void handle_chat_mode(ChatState *state, int *mode) {
                 mvwprintw(win_custom, 2, 2, "Port cannot be empty. Try again.");
                 wrefresh(win_custom);
                 napms(1000);
-            } else if (strcmp(state->port_str, "q")==0 || strcmp(state->port_str, "Q")==0) {
+            }
+            else if (strcmp(state->port_str, "q") == 0 || strcmp(state->port_str, "Q") == 0) {
                 werase(win_custom);
                 box(win_custom, 0, 0);
                 mvwprintw(win_custom, 1, 2, "Cancelled Chat. Returning to main UI...");
@@ -703,22 +773,24 @@ static void handle_chat_mode(ChatState *state, int *mode) {
                 create_windows(1);
                 load_todo();
                 draw_todo(win_todo);
-            } else {
+            }
+            else {
                 state->port = atoi(state->port_str);
                 if (state->port <= 0 || state->port > 65535) {
                     mvwprintw(win_custom, 2, 2, "Invalid port. Try again (or 'q').");
                     wrefresh(win_custom);
                     napms(1000);
-                } else {
+                }
+                else {
                     state->step = 2;
                 }
             }
         }
         else if (ch >= 32 && ch <= 126) {
             int len = strlen(state->port_str);
-            if (len < (int)sizeof(state->port_str)-1) {
+            if (len < (int)sizeof(state->port_str) - 1) {
                 state->port_str[len] = (char)ch;
-                state->port_str[len+1] = '\0';
+                state->port_str[len + 1] = '\0';
             }
         }
     }
@@ -743,7 +815,7 @@ static void handle_chat_mode(ChatState *state, int *mode) {
         if (ch == KEY_BACKSPACE || ch == 127) {
             int len = strlen(state->nickname);
             if (len > 0) {
-                state->nickname[len-1] = '\0';
+                state->nickname[len - 1] = '\0';
             }
         }
         else if (ch == '\n' || ch == KEY_ENTER) {
@@ -751,15 +823,16 @@ static void handle_chat_mode(ChatState *state, int *mode) {
                 mvwprintw(win_custom, 2, 2, "Nickname cannot be empty. Try again.");
                 wrefresh(win_custom);
                 napms(1000);
-            } else {
+            }
+            else {
                 state->step = 3;
             }
         }
         else if (ch >= 32 && ch <= 126) {
             int len = strlen(state->nickname);
-            if (len < (int)sizeof(state->nickname)-1) {
+            if (len < (int)sizeof(state->nickname) - 1) {
                 state->nickname[len] = (char)ch;
-                state->nickname[len+1] = '\0';
+                state->nickname[len + 1] = '\0';
             }
         }
     }
@@ -780,22 +853,19 @@ static void handle_chat_mode(ChatState *state, int *mode) {
         pthread_join(timer_thread_id, NULL);
 
         // 채팅 모드 종료 후 → 메인 UI로 복귀
-        werase(win_custom);
-        create_windows(1);
-        *mode = MODE_LOBBY;
-        load_todo();
-        draw_todo(win_todo);
-
-        // Reset chat state
         state->step = 0;
         memset(state->host, 0, sizeof(state->host));
         memset(state->port_str, 0, sizeof(state->port_str));
         memset(state->nickname, 0, sizeof(state->nickname));
+        // argv[0]부터 프로그램 전체를 execvp로 덮어쓴다
+        char* argv_new[] = { "./coshell", "ui", NULL };
+        execvp(argv_new[0], argv_new);
+
     }
 }
 
 /* Handle QR path input mode */
-static void handle_qr_input_mode(QRInputState *qr_state, int *mode) {
+static void handle_qr_input_mode(QRInputState* qr_state, int* mode) {
     werase(win_custom);
     box(win_custom, 0, 0);
     mvwprintw(win_custom, 1, 2, "Enter path for QR code (or 'q' to cancel):");
@@ -842,7 +912,7 @@ static void handle_qr_input_mode(QRInputState *qr_state, int *mode) {
 }
 
 /* Handle QR full-screen mode */
-static void handle_qr_full_mode(QRInputState *qr_state, int *mode) {
+static void handle_qr_full_mode(QRInputState* qr_state, int* mode) {
     // 1) QR 전체화면 출력
     process_and_show_file(win_custom, qr_state->pathbuf);
 
@@ -850,7 +920,7 @@ static void handle_qr_full_mode(QRInputState *qr_state, int *mode) {
     endwin();   // ncurses 세션 종료
 
     // argv[0]부터 프로그램 전체를 execvp로 덮어쓴다
-    char *argv_new[] = { "./coshell", "ui", NULL };
+    char* argv_new[] = { "./coshell", "ui", NULL };
     execvp(argv_new[0], argv_new);
 
     // execvp가 실패하면 여기에 옴
@@ -862,54 +932,64 @@ static void handle_qr_full_mode(QRInputState *qr_state, int *mode) {
 /*   ncurses 초기화/정리/리사이즈 */
 /*==============================*/
 static void cleanup_ncurses(void) {
-    if (win_time)   { delwin(win_time);   win_time = NULL; }
+    if (win_time) { delwin(win_time);   win_time = NULL; }
     if (win_custom) { delwin(win_custom); win_custom = NULL; }
-    if (win_todo)   { delwin(win_todo);   win_todo = NULL; }
-    if (win_input)  { delwin(win_input);  win_input = NULL; }
+    if (win_todo) { delwin(win_todo);   win_todo = NULL; }
+    if (win_input) { delwin(win_input);  win_input = NULL; }
     endwin();
+
 }
 
 /*==============================*/
 /*   Time 문자열 생성 함수     */
 /*==============================*/
 static void get_time_strings(char* local_buf, int len1,
-                             char* us_buf,    int len2,
-                             char* uk_buf,    int len3)
+    char* tz1_buf, int len2,
+    char* tz2_buf, int len3)
 {
     time_t t = time(NULL);
+
+    // 1) 로컬
     struct tm tm_local = *localtime(&t);
     strftime(local_buf, len1, "%Y-%m-%d %H:%M:%S", &tm_local);
 
-    struct tm tm_us = tm_local;
-    tm_us.tm_hour -= 14;    // KST → USA ET
-    mktime(&tm_us);
-    strftime(us_buf, len2, "%Y-%m-%d %H:%M:%S (USA ET)", &tm_us);
+    // 2) 첫 번째 원격 타임존
+    time_t t1 = t + tz1_offset;
+    struct tm tm1 = *gmtime(&t1);
+    snprintf(tz1_buf, len2,
+        "%04d-%02d-%02d %02d:%02d:%02d (%s)",
+        tm1.tm_year + 1900, tm1.tm_mon + 1, tm1.tm_mday,
+        tm1.tm_hour, tm1.tm_min, tm1.tm_sec,
+        tz1_label);
 
-    struct tm tm_uk = tm_local;
-    tm_uk.tm_hour -= 9;     // KST → UK GMT
-    mktime(&tm_uk);
-    strftime(uk_buf, len3, "%Y-%m-%d %H:%M:%S (UK GMT)", &tm_uk);
+    // 3) 두 번째 원격 타임존
+    time_t t2 = t + tz2_offset;
+    struct tm tm2 = *gmtime(&t2);
+    snprintf(tz2_buf, len3,
+        "%04d-%02d-%02d %02d:%02d:%02d (%s)",
+        tm2.tm_year + 1900, tm2.tm_mon + 1, tm2.tm_mday,
+        tm2.tm_hour, tm2.tm_min, tm2.tm_sec,
+        tz2_label);
 }
 
+
 void update_time(WINDOW* w) {
-    char local_buf[32], us_buf[32], uk_buf[32];
-    get_time_strings(local_buf,sizeof(local_buf),
-                     us_buf,sizeof(us_buf),
-                     uk_buf,sizeof(uk_buf));
-    int h_time, w_time;
-    getmaxyx(w, h_time, w_time);
-    if (h_time<5 || w_time<20) return;
+    char local_buf[32], tz1_buf[128], tz2_buf[128];
+    get_time_strings(local_buf, sizeof(local_buf),
+        tz1_buf, sizeof(tz1_buf),
+        tz2_buf, sizeof(tz2_buf));
+
     werase(w);
-    box(w,0,0);
-    mvwprintw(w,0,2," Time ");
-    mvwprintw(w,1,2,"Local: %s", local_buf);
-    mvwprintw(w,2,2,"USA  : %s", us_buf);
-    mvwprintw(w,3,2,"UK   : %s", uk_buf);
+    box(w, 0, 0);
+    mvwprintw(w, 0, 2, " Time ");
+    mvwprintw(w, 1, 2, "Local: %s", local_buf);
+    mvwprintw(w, 2, 2, "%s: %s", tz1_label, tz1_buf);
+    mvwprintw(w, 3, 2, "%s: %s", tz2_label, tz2_buf);
     wrefresh(w);
 }
 
 // 매초 윈도우의 시간을 업데이트해 주는 스레드 함수 (Chat 모드에서만 사용)
-static void *timer_thread_fn(void *arg) {
+static void* timer_thread_fn(void* arg) {
     (void)arg;
     while (chat_running) {
         update_time(win_time);
@@ -920,22 +1000,22 @@ static void *timer_thread_fn(void *arg) {
 
 // 주어진 문자열 배열(lines)를 max_cols 폭에 맞춰 win에 출력
 static void print_wrapped_lines(WINDOW* win, int start_y, int max_lines, int max_cols,
-                                const char* lines[], int n)
+    const char* lines[], int n)
 {
     int row = start_y;
-    for (int i=0; i<n && row<start_y+max_lines; i++) {
+    for (int i = 0; i < n && row < start_y + max_lines; i++) {
         const char* text = lines[i];
         int len = text ? (int)strlen(text) : 0;
         int offset = 0;
         if (len == 0) {
-            if (row < start_y+max_lines) {
+            if (row < start_y + max_lines) {
                 mvwaddch(win, row++, 2, ' ');
             }
             continue;
         }
-        while (offset < len && row<start_y+max_lines) {
-            int chunk = (len-offset > max_cols ? max_cols : len-offset);
-            mvwprintw(win, row++, 2, "%.*s", chunk, text+offset);
+        while (offset < len && row < start_y + max_lines) {
+            int chunk = (len - offset > max_cols ? max_cols : len - offset);
+            mvwprintw(win, row++, 2, "%.*s", chunk, text + offset);
             offset += chunk;
         }
     }
@@ -947,41 +1027,41 @@ void create_windows(int in_lobby) {
     getmaxyx(stdscr, rows, cols);
 
     // (1) 기존 윈도우 삭제
-    if (win_time)   { delwin(win_time);   win_time = NULL; }
+    if (win_time) { delwin(win_time);   win_time = NULL; }
     if (win_custom) { delwin(win_custom); win_custom = NULL; }
-    if (win_todo)   { delwin(win_todo);   win_todo = NULL; }
-    if (win_input)  { delwin(win_input);  win_input = NULL; }
+    if (win_todo) { delwin(win_todo);   win_todo = NULL; }
+    if (win_input) { delwin(win_input);  win_input = NULL; }
 
     // (2) 크기 계산
-    int left_width   = cols / 2;
-    int right_width  = cols - left_width;
-    int left_height  = rows - INPUT_HEIGHT;
+    int left_width = cols / 2;
+    int right_width = cols - left_width;
+    int left_height = rows - INPUT_HEIGHT;
     int title_height = 1;
-    int time_height  = 5;    // border(2) + 라벨(1) + 시간 3줄 = 5
-    int custom_y     = title_height + time_height;
+    int time_height = 5;    // border(2) + 라벨(1) + 시간 3줄 = 5
+    int custom_y = title_height + time_height;
     int custom_height = left_height - custom_y;
     if (custom_height < 1) custom_height = 1;
 
     // (3) 상단 타이틀
-    mvprintw(0, 0, "<< CoShell >> Beta");
+    mvprintw(0, 0, "<< CoShell >>");
     refresh();
 
     // (4) 왼쪽 상단: Time 표시 창
-    win_time   = newwin(time_height,   left_width,    title_height, 0);
+    win_time = newwin(time_height, left_width, title_height, 0);
     // (5) 왼쪽 중간/하단: 로비 또는 모드 콘텐츠
-    win_custom = newwin(custom_height, left_width,    custom_y,     0);
+    win_custom = newwin(custom_height, left_width, custom_y, 0);
     // (6) 오른쪽 전체: ToDoList 창
-    win_todo   = newwin(rows-INPUT_HEIGHT, right_width, 0,          left_width);
+    win_todo = newwin(rows - INPUT_HEIGHT, right_width, 0, left_width);
     // (7) 맨 아래: Command 입력창
-    win_input  = newwin(INPUT_HEIGHT,   cols,          rows-INPUT_HEIGHT, 0);
+    win_input = newwin(INPUT_HEIGHT, cols, rows - INPUT_HEIGHT, 0);
 
     // (8) 스크롤 설정
-    scrollok(win_time,   FALSE);
+    scrollok(win_time, FALSE);
     scrollok(win_custom, TRUE);
-    scrollok(win_todo,   TRUE);
+    scrollok(win_todo, TRUE);
 
     // (9) Time 창 초기화
-    box(win_time,  0, 0);
+    box(win_time, 0, 0);
     mvwprintw(win_time, 0, 2, " Time ");
     mvwprintw(win_time, 1, 2, "Local:    --:--:--");
     mvwprintw(win_time, 2, 2, "USA  :    --:--:--");
@@ -994,20 +1074,20 @@ void create_windows(int in_lobby) {
         int maxy, maxx;
         getmaxyx(win_custom, maxy, maxx);
         int inner_lines = maxy - 2;
-        int inner_cols  = maxx - 4;
-        print_wrapped_lines(win_custom,1,inner_lines,inner_cols,
-                            lobby_text, lobby_lines);
+        int inner_cols = maxx - 4;
+        print_wrapped_lines(win_custom, 1, inner_lines, inner_cols,
+            lobby_text, lobby_lines);
     }
     wrefresh(win_custom);
 
     // (11) ToDoList 창 초기화
     box(win_todo, 0, 0);
-    mvwprintw(win_todo,1,2,"=== ToDo List ===");
+    mvwprintw(win_todo, 1, 2, "=== ToDo List ===");
     wrefresh(win_todo);
 
     // (12) 입력창 초기화
     box(win_input, 0, 0);
-    mvwprintw(win_input,1,2,"Command: ");
+    mvwprintw(win_input, 1, 2, "Command: ");
     wrefresh(win_input);
 }
 
@@ -1029,23 +1109,23 @@ static int setup_serveo_tunnel(int local_port) {
         close(pipe_fd[1]);
         char forward_arg[64];
         snprintf(forward_arg, sizeof(forward_arg), "0:localhost:%d", local_port);
-        execlp("ssh","ssh",
-               "-o","StrictHostKeyChecking=no",
-               "-o","ServerAliveInterval=60",
-               "-N","-R", forward_arg,
-               "serveo.net",
-               (char*)NULL);
+        execlp("ssh", "ssh",
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "ServerAliveInterval=60",
+            "-N", "-R", forward_arg,
+            "serveo.net",
+            (char*)NULL);
         perror("execlp");
         _exit(1);
     }
     else {
         close(pipe_fd[1]);
-        FILE *fp = fdopen(pipe_fd[0],"r");
+        FILE* fp = fdopen(pipe_fd[0], "r");
         if (!fp) { close(pipe_fd[0]); return -1; }
         char line[512];
         int remote_port = -1;
-        while (fgets(line,sizeof(line),fp)) {
-            if (sscanf(line,"Allocated port %d",&remote_port)==1) {
+        while (fgets(line, sizeof(line), fp)) {
+            if (sscanf(line, "Allocated port %d", &remote_port) == 1) {
                 printf(">> Serveo 터널 할당 완료: serveo.net:%d\n", remote_port);
                 fflush(stdout);
                 break;
@@ -1053,5 +1133,83 @@ static int setup_serveo_tunnel(int local_port) {
         }
         fclose(fp);
         return remote_port;
+    }
+}
+
+
+static void handle_tz_mode(TzState* state, int* mode) {
+    int row = 1;
+    werase(win_custom);
+    box(win_custom, 0, 0);
+    mvwprintw(win_custom, row++, 2, "4. Setting TimeZone");
+    mvwprintw(win_custom, row++, 2, "Usage: <slot> <option#>  (slot:1 or 2)");
+    mvwprintw(win_custom, row++, 2, "or 'q' to cancel");
+    mvwprintw(win_custom, row++, 2, "Available options:");
+    for (int i = 0; i < tzOptionCount; i++) {
+        mvwprintw(win_custom, row++, 2, "%2d. %s", i + 1, tzOptions[i].label);
+    }
+    mvwprintw(win_custom, row++, 2, "%s", state->buf);
+    wrefresh(win_custom);
+
+    // 입력창
+    werase(win_input);
+    box(win_input, 0, 0);
+    mvwprintw(win_input, 1, 2, "%s", state->buf);
+    wmove(win_input, 1, 2 + state->len);
+    wrefresh(win_input);
+
+    wtimeout(win_input, 200);
+    int ch = wgetch(win_input);
+    if (ch == KEY_RESIZE) { resized = 1; return; }
+    if (ch == ERR)        return;
+
+    if (ch == KEY_BACKSPACE || ch == 127) {
+        if (state->len > 0) state->buf[--state->len] = '\0';
+    }
+    else if (ch == '\n' || ch == KEY_ENTER) {
+        if (state->len == 0) return;
+        if (state->buf[0] == 'q' || state->buf[0] == 'Q') {
+            *mode = MODE_LOBBY;
+            create_windows(1);
+            load_todo(); draw_todo(win_todo);
+            return;
+        }
+        // tokenizing
+        char tmp[16];
+        strcpy(tmp, state->buf);
+        int slot, opt;
+        if (sscanf(tmp, "%d %d", &slot, &opt) == 2
+            && (slot == 1 || slot == 2) && opt >= 1 && opt <= tzOptionCount) {
+            // 적용
+            if (slot == 1) {
+                tz1_offset = tzOptions[opt - 1].offset;
+                snprintf(tz1_label, sizeof(tz1_label), "%s", tzOptions[opt - 1].label);
+
+            }
+            else {
+                tz2_offset = tzOptions[opt - 1].offset;
+                snprintf(tz2_label, sizeof(tz2_label), "%s", tzOptions[opt - 1].label);
+
+            }
+            mvwprintw(win_custom, row + 1, 2, "Slot %d set to %s", slot, tzOptions[opt - 1].label);
+            wrefresh(win_custom);
+            napms(1000);
+            *mode = MODE_LOBBY;
+            create_windows(1);
+            load_todo(); draw_todo(win_todo);
+        }
+        else {
+            mvwprintw(win_custom, row + 1, 2, "Invalid input. Try again.");
+            wrefresh(win_custom);
+            napms(1000);
+            state->len = 0;
+            state->buf[0] = '\0';
+        }
+    }
+    else if (ch >= 32 && ch <= 126) {
+        if (state->len < (int)sizeof(state->buf) - 1) {
+            state->buf[state->len++] = (char)ch;
+            state->buf[state->len] = '\0';
+        }
     }
 }

@@ -1,7 +1,7 @@
-//========================================
-//          ToDo 클라이언트 모듈
-//     - 서버 연결 및 명령 전송 처리
-//========================================
+/*========================================
+ *          ToDo 클라이언트 모듈
+ *     - 서버 연결 및 명령 전송 처리
+ *========================================*/
 
 #define _POSIX_C_SOURCE 200809L
 
@@ -13,107 +13,80 @@
 #include <arpa/inet.h>
 #include <errno.h>
 
-static int server_fd = -1;
 
-/*==============================*/
-/*      서버 연결 시도 함수     */
-/*==============================*/
-int connect_todo_server(const char *ip, int port) {
-    if (server_fd != -1) return 0; // 이미 연결되어 있음
 
-    server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd < 0) return -1;
 
+int send_todo_command(const char* cmd, char* response, size_t size) {
+    // 1) 새 소켓 열기
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) {
+        snprintf(response, size, "ERROR: socket failed: %s", strerror(errno));
+        return -1;
+    }
+
+    // 2) 서버에 연결
     struct sockaddr_in addr = {
         .sin_family = AF_INET,
-        .sin_port = htons(port),
+        .sin_port = htons(TEAM_PORT),   // todo.h 에 정의된 포트
     };
-    inet_pton(AF_INET, ip, &addr.sin_addr);
-
-    if (connect(server_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        close(server_fd);
-        server_fd = -1;
-        return -1;
-    }
-    return 0;
-}
-
-/*==============================*/
-/*      서버 연결 해제 함수     */
-/*==============================*/
-void disconnect_todo_server() {
-    if (server_fd != -1) {
-        close(server_fd);
-        server_fd = -1;
-    }
-}
-
-/*==============================*/
-/*    명령 전송 및 응답 수신    */
-/*==============================*/
-int send_todo_command(const char *cmd, char *response, size_t size) {
-    if (server_fd == -1) {
-        fprintf(stderr, "[send] 서버 연결 안 됨\n");
+    inet_pton(AF_INET, TEAM_IP, &addr.sin_addr);
+    if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        snprintf(response, size, "ERROR: connect failed: %s", strerror(errno));
+        close(sock);
         return -1;
     }
 
-    fprintf(stderr, "[send] → %s\n", cmd);
-
-    if (write(server_fd, cmd, strlen(cmd)) < 0) {
-        perror("[send] write 실패");
-        return -1;
-    }
-    if (write(server_fd, "\n", 1) < 0) {
-        perror("[send] write 줄바꿈 실패");
+    // 3) 명령 전송 (cmd + '\n')
+    if (write(sock, cmd, strlen(cmd)) < 0 ||
+        write(sock, "\n", 1) < 0) {
+        snprintf(response, size, "ERROR: write failed: %s", strerror(errno));
+        close(sock);
         return -1;
     }
 
-    int len = read(server_fd, response, size - 1);
+    // 4) 응답 읽기
+    ssize_t len = read(sock, response, size - 1);
     if (len <= 0) {
-        perror("[send] read 실패 or 응답 없음");
-	response[0] = '\0';
+        snprintf(response, size, "ERROR: no response");
+        close(sock);
         return -1;
     }
-
     response[len] = '\0';
-    fprintf(stderr, "[recv] ← %s\n", response);
+
+    // 5) 닫기
+    close(sock);
     return 0;
 }
+
 
 /*==============================*/
 /*  서버 응답 → todo 배열 파싱  */
 /*==============================*/
-void parse_todo_list(const char *response) {
+void parse_todo_list(const char* response) {
     pthread_mutex_lock(&todo_lock);
 
     // 이전에 저장된 ToDo 항목 해제
     for (int i = 0; i < MAX_TODO; i++) {
-        if (todos[i]) {
-            free(todos[i]);
-            todos[i] = NULL;
-        }
+        free(todos[i]);
+        todos[i] = NULL;
     }
-
     todo_count = 0;
 
-    if (!response || strlen(response) == 0) {
+    if (response == NULL || *response == '\0') {
         pthread_mutex_unlock(&todo_lock);
         return;
     }
 
-    char *copy = strdup(response);
-    if (!copy) {
-        pthread_mutex_unlock(&todo_lock);
-        return;
+    char* copy = strdup(response);
+    if (copy) {
+        char* line = strtok(copy, "\n");
+        while (line && todo_count < MAX_TODO) {
+            todos[todo_count++] = strdup(line);
+            line = strtok(NULL, "\n");
+        }
+        free(copy);
     }
 
-    char *line = strtok(copy, "\n");
-    while (line && todo_count < MAX_TODO) {
-        todos[todo_count++] = strdup(line);
-        line = strtok(NULL, "\n");
-    }
-
-    free(copy);  // 복사본 해제
     pthread_mutex_unlock(&todo_lock);
 }
 
