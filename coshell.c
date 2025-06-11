@@ -14,12 +14,15 @@
  *   sudo apt install -y libncursesw5-dev qrencode
  *
  * 실행 방식:
- *   ./coshell                  # 메뉴/CLI/UI 모드 선택
- *   ./coshell server           # Chat 서버 (Serveo 터널링 포함)
- *   ./coshell add <item>       # CLI 모드: ToDo 추가
- *   ./coshell list             # CLI 모드: ToDo 목록 출력
- *   ./coshell del <index>      # CLI 모드: ToDo 삭제
- *   ./coshell qr <filepath>    # CLI 모드: ASCII QR 출력
+ *   ./coshell                  	# 메뉴/CLI/UI 모드 선택
+ *   ./coshell server           	# Chat 서버 (Serveo 터널링 포함)
+ *   ./coshell add  <item>      	# CLI 모드: ToDo 추가
+ *   ./coshell list             	# CLI 모드: ToDo 목록 출력
+ *   ./coshell done <index>		# CLI 모드: Done ToDo
+ *   ./coshell undo <index>		# CLI 모드: Undo ToDO
+ *   ./coshell del  <index>     	# CLI 모드: ToDo 삭제
+ *   ./coshell edit <index> <new item>  # CLI 모드: ToDo 수정
+ *   ./coshell qr   <filepath>    	# CLI 모드: ASCII QR 출력
  */
 
 #define _POSIX_C_SOURCE 200809L
@@ -38,7 +41,13 @@
 #include <netinet/in.h>
 
 #include "chat.h"
+
 #include "todo.h"
+// 공유 변수
+extern int todo_count;
+extern char *todos[MAX_TODO];
+extern char current_todo_file[256];
+
 #include "qr.h" 
 
 #define MAX_CLIENTS   5
@@ -75,7 +84,7 @@ typedef struct {
 typedef struct {
     const char *code;   // internal key (안 써도 무방)
     const char *label;  // 화면에 찍을 이름
-    int          offset;// UTC로부터의 초 단위 오프셋
+    int        offset;  // UTC로부터의 초 단위 오프셋
 } TZOption;
 
 static const TZOption tzOptions[] = {
@@ -170,8 +179,11 @@ int main(int argc, char* argv[]) {
     }
     else if (strcmp(argv[1], "add") == 0 ||
         strcmp(argv[1], "list") == 0 ||
-        strcmp(argv[1], "del") == 0 ||
-        strcmp(argv[1], "qr") == 0)
+        strcmp(argv[1], "done") == 0 ||
+        strcmp(argv[1], "undo") == 0 ||
+        strcmp(argv[1],  "del") == 0 ||
+        strcmp(argv[1], "edit") == 0 ||
+        strcmp(argv[1],   "qr") == 0)
     {
         cli_main(argc - 1, &argv[1]);
     }
@@ -249,6 +261,8 @@ static void show_main_menu(void) {
 /*==============================*/
 static void cli_main(int argc, char* argv[]) {
     if (argc == 0) return;
+    
+    strcpy(current_todo_file, USER_TODO_FILE);
     load_todo();
 
     if (strcmp(argv[0], "list") == 0) {
@@ -265,27 +279,60 @@ static void cli_main(int argc, char* argv[]) {
         add_todo(buf);
         printf("Added: %s\n", buf);
     }
+    else if (strcmp(argv[0], "done") == 0 && argc == 2) {
+	if (argc != 2) {
+            fprintf(stderr, "Usage: done <index>\n");
+            return;
+    	}
+    	int idx = atoi(argv[1]);
+    	if (idx <= 0 || idx > todo_count) {
+            printf("Invalid index.\n");
+            return;
+    	}
+    	done_todo(idx);
+    	printf("Marked #%d as done.\n", idx);
+    }	
+    else if (strcmp(argv[0], "undo") == 0 && argc == 2) {
+	if (argc != 2) {
+            fprintf(stderr, "Usage: undo <index>\n");
+            return;
+    	}
+    	int idx = atoi(argv[1]);
+    	if (idx <= 0 || idx > todo_count) {
+            printf("Invalid index.\n");
+            return;
+    	}
+    	undo_todo(idx);
+    	printf("Marked #%d as not done.\n", idx);
+    }
     else if (strcmp(argv[0], "del") == 0 && argc == 2) {
-        int idx = atoi(argv[1]) - 1;
-        if (idx < 0 || idx >= todo_count) {
+        int idx = atoi(argv[1]);
+        
+	if (idx < 1 || idx > todo_count) {
             printf("Invalid index.\n");
             return;
         }
-        pthread_mutex_lock(&todo_lock);
-        free(todos[idx]);
-        for (int i = idx;i < todo_count - 1;i++) {
-            todos[i] = todos[i + 1];
+
+	del_todo(idx);
+        printf("Deleted todo #%d\n", idx);
+    }
+    else if (strcmp(argv[0], "edit") == 0 && argc >= 3) {
+	if (argc < 3) {
+            fprintf(stderr, "Usage: edit <index> <new text>\n");
+            return;
         }
-        todo_count--;
-        FILE* fp = fopen(USER_TODO_FILE, "w");
-        if (fp) {
-            for (int i = 0;i < todo_count;i++) {
-                fprintf(fp, "%s\n", todos[i]);
-            }
-            fclose(fp);
-        }
-        pthread_mutex_unlock(&todo_lock);
-        printf("Deleted todo #%d\n", idx + 1);
+    	int idx = atoi(argv[1]);
+    	if (idx <= 0 || idx > todo_count) {
+            printf("Invalid index.\n");
+            return;
+    	}
+    	char new_text[512] = {0};
+    	for (int i = 2; i < argc; i++) {
+            strcat(new_text, argv[i]);
+            if (i < argc - 1) strcat(new_text, " ");
+    	}
+   	edit_todo(idx, new_text);
+    	printf("Edited #%d to: %s\n", idx, new_text);
     }
     else if (strcmp(argv[0], "qr") == 0 && argc == 2) {
         show_qr_cli(argv[1]);
