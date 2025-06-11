@@ -7,7 +7,7 @@
  *    4) ncurses UI: 분할 창, 버튼, 로비 → ToDo/Chat/QR 전환
  *
  * 빌드 예시:
- *   gcc coshell.c chat.c todo_ui.c todo_core.c todo_client.c qr.c -o coshell -Wall -O2 -std=c11 -lncursesw -lpthread
+ *   gcc coshell.c chat.c todo_core.c todo_client.c qr.c -o coshell -Wall -O2 -std=c11 -lncursesw -lpthread
  *
  * 사용 패키지 (Ubuntu/Debian):
  *   sudo apt update
@@ -110,11 +110,11 @@ static char tz2_label[16] = "UK GMT";
 // 로비 텍스트
 static const char* lobby_text[] = {
     "Welcome!",
-    "CoShell: terminal-based collaboration toolbox.",
+    "CoShell: Terminal-Based Collaboration Toolbox.",
     "1. To-Do List Management",
     "2. Chat",
     "3. QR Code",
-    "4. Setting Time",
+    "4. Time Setting",
     "",
     "Type 'exit' to quit at any time."
 };
