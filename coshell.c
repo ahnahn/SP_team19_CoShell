@@ -104,9 +104,6 @@ static char tz2_label[16] = "UK GMT";
 static const char *lobby_text[] = {
     "Welcome!",
     "CoShell, short for \"cooperation in Shell,\" is a terminal-based collaboration toolbox.",
-    "With To-Do List Management, you can share plans with your team members,",
-    "exchange information via real-time chat,",
-    "and transmit data using QR codes for groundbreaking data transfer.",
     "",
     "Enter a command below to start collaborating:",
     "",
