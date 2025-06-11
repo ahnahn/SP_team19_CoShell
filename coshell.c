@@ -39,8 +39,8 @@
 
 #include "chat.h"
 #include "todo.h"
-#include "qr.h" 
-#include"todo_server.h"
+#include "qr.h"
+
 
 
 #define MAX_CLIENTS   5
@@ -104,9 +104,6 @@ static char tz2_label[16] = "UK GMT";
 static const char *lobby_text[] = {
     "Welcome!",
     "CoShell, short for \"cooperation in Shell,\" is a terminal-based collaboration toolbox.",
-    "With To-Do List Management, you can share plans with your team members,",
-    "exchange information via real-time chat,",
-    "and transmit data using QR codes for groundbreaking data transfer.",
     "",
     "Enter a command below to start collaborating:",
     "",
@@ -188,8 +185,8 @@ int main(int argc, char* argv[]) {
         cli_main(argc - 1, &argv[1]);
     }
     else if (strcmp(argv[1], "ui") == 0) {
-        start_todo_server(TODO_SERVER_PORT);
-	ui_main();
+
+        ui_main();
     }
     else if (strcmp(argv[1], "server") == 0) {
         printf(">> Serveo.net: Chat 서버 원격 포트 요청 중...\n");
@@ -200,7 +197,7 @@ int main(int argc, char* argv[]) {
         else {
             printf(">> Serveo Chat 주소: serveo.net:%d → 내부 %d 포트\n", remote_port, LOCAL_PORT);
         }
-	start_todo_server(TODO_SERVER_PORT);
+
 
         chat_server(LOCAL_PORT);
     }
@@ -240,17 +237,17 @@ static void show_main_menu(void) {
             }
             else {
                 printf(">> Serveo Chat 주소: serveo.net:%d\n", remote_port);
-            
-	    }
-	    start_todo_server(TODO_SERVER_PORT);
+
+            }
+
 
 
             chat_server(LOCAL_PORT);
             break;
         }
         else if (choice == 2) {
-            
-	    start_todo_server(TODO_SERVER_PORT);
+
+
             ui_main();
             break;
         }
@@ -585,10 +582,10 @@ static void ui_main(void) {
     }
 
     endwin();  // ncurses 종료
-	  endwin();
-	  echo();
-	  nocbreak();
-	  curs_set(1);
+          endwin();
+          echo();
+          nocbreak();
+          curs_set(1);
 }
 
 /* Handle ToDo mode input */
@@ -868,7 +865,7 @@ static void handle_chat_mode(ChatState* state, int* mode) {
         memset(state->port_str, 0, sizeof(state->port_str));
         memset(state->nickname, 0, sizeof(state->nickname));
         // argv[0]부터 프로그램 전체를 execvp로 덮어쓴다
-	cleanup_ncurses();
+        cleanup_ncurses();
         char* argv_new[] = { "./coshell", "ui", NULL };
         execvp(argv_new[0], argv_new);
 
