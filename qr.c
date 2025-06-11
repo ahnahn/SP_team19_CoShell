@@ -10,7 +10,7 @@
 #include <signal.h>
 #include <unistd.h>
 
-#define MAX_QR_BYTES 800
+#define MAX_QR_BYTES 700
 
 // 내부 헬퍼: 터미널 화면 크기에 맞춰서 QR 버전을 자동 계산
 static int pick_version_for_module(int max_module) {
