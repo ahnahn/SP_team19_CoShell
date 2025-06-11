@@ -22,10 +22,9 @@ int todo_count = 0;
 pthread_mutex_t todo_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /* 팀 ToDo 서버와의 연결 및 명령 송수신을 위한 todo_clinet.c  함수 선언 */
-extern  int connect_todo_server(const char *host, int port); // 지정된 호스트와 포트로 서버 연결
-extern void disconnect_todo_server(); // 현재 서버 연결 종료
-extern  int send_todo_command(const char *cmd, char *buf, size_t size); // 서버에 명령어 전송 후 응답을 buf에 저장
-
+extern  int connect_todo_server(const char *host, int port);
+extern void disconnect_todo_server();
+extern  int send_todo_command(const char *cmd, char *buf, size_t size);
 
 /*==============================*/
 /*    오류 메시지 출력 함수     */
@@ -156,12 +155,13 @@ void load_todo() {
     pthread_mutex_lock(&todo_lock);
     
     // 1. 기존 데이터 해제
-    for (int i = 0; i < todo_count; i++) {
-        free(todos[i]);
-        todos[i] = NULL;
+    for (int i = 0; i < MAX_TODO; i++) {
+        if (todos[i]) {
+            free(todos[i]);
+            todos[i] = NULL;
+        }
     }
-    todo_count = 0;
-    
+
     // 2. 새로운 데이터 로딩
     char line[256];
     while (fgets(line, sizeof(line), fp) && todo_count < MAX_TODO) {
@@ -248,12 +248,17 @@ void del_todo(int index) {
         pthread_mutex_unlock(&todo_lock);
         return;
     }
+
     int i = index - 1;
+    
     free(todos[i]);
     for (int j = i; j < todo_count - 1; j++) {
         todos[j] = todos[j + 1];
     }
+    
+    todos[todo_count] = NULL;
     todo_count--;
+    
     save_todo_to_file();
     pthread_mutex_unlock(&todo_lock);
 }
