@@ -1,10 +1,3 @@
-/*========================================
- *          ToDo 서버 모듈
- *    - 클라이언트 명령 수신 및 처리
- *    - 파일 기반 공유 리스트 저장
- *    - pthread로 coshell 내에서 백그라운드 실행 가능
- *========================================*/
-
 #define _POSIX_C_SOURCE 200809L
 
 #include "todo_server.h"
@@ -68,7 +61,8 @@ static void save_todos(void) {
 /*==============================*/
 static void handle_command(int client_fd) {
     dprintf(client_fd, "DBG_SERVER: got connection\n");
-	char buf[BUF_SIZE];
+
+    char buf[BUF_SIZE];
     ssize_t n = read(client_fd, buf, sizeof(buf) - 1);
     if (n <= 0) {
         close(client_fd);
@@ -77,7 +71,7 @@ static void handle_command(int client_fd) {
     buf[n] = '\0';
     buf[strcspn(buf, "\r\n")] = '\0';
 
-	fprintf(stderr, "[DBG_SERVER] cmd='%s'\n", buf);
+    fprintf(stderr, "[DBG_SERVER] cmd='%s'\n", buf);
 
     char response[BUF_SIZE] = {0};
     char cmd[16]          = {0};
@@ -87,7 +81,7 @@ static void handle_command(int client_fd) {
     pthread_mutex_lock(&todo_lock);
 
     // 명령어 파싱: 첫 단어=cmd, 나머지=arg1
-    if (sscanf(buf, "%15s %1023[^\"]", cmd, arg1) < 1) {
+    if (sscanf(buf, "%15s %1023[^\n]", cmd, arg1) < 1) {
         snprintf(response, sizeof(response), "ERROR: Invalid input\n");
     }
     else if (strcmp(cmd, "add") == 0) {
@@ -147,8 +141,8 @@ static void handle_command(int client_fd) {
         }
     }
     else if (strcmp(cmd, "edit") == 0) {
-        char arg2[BUF_SIZE];
-        if (sscanf(arg1, "%d %1023[^\"]", &idx, arg2) < 2) {
+        char arg2[BUF_SIZE] = {0};
+        if (sscanf(arg1, "%d %1023[^\n]", &idx, arg2) < 2) {
             snprintf(response, sizeof(response),
                      "ERROR: Usage: edit <num> <new item>\n");
         } else {
@@ -159,7 +153,11 @@ static void handle_command(int client_fd) {
                 int done = (strstr(todos[idx], "[x]") != NULL);
                 free(todos[idx]);
                 char tmp[BUF_SIZE];
-                snprintf(tmp, sizeof(tmp), "%s [%c]", arg2, done ? 'x':' ');
+                // 이 snprintf만 경고를 억제
+                #pragma GCC diagnostic push
+                #pragma GCC diagnostic ignored "-Wformat-truncation"
+                snprintf(tmp, sizeof(tmp), "%s [%c]", arg2, done ? 'x' : ' ');
+                #pragma GCC diagnostic pop
                 todos[idx] = strdup(tmp);
                 save_todos();
                 snprintf(response, sizeof(response), "OK\n");
@@ -173,8 +171,11 @@ static void handle_command(int client_fd) {
             for (int i = 0; i < todo_count; i++) {
                 char line[BUF_SIZE];
                 snprintf(line, sizeof(line), "%d. %s\n", i+1, todos[i]);
-                size_t rem = sizeof(response) - strlen(response) - 1;
-                strncat(response, line, rem);
+                // strncat 대신 안전하게 snprintf로 이어붙이기
+                size_t used = strlen(response);
+                snprintf(response + used,
+                         sizeof(response) - used,
+                         "%s", line);
             }
         }
     }
@@ -184,7 +185,11 @@ static void handle_command(int client_fd) {
 
     pthread_mutex_unlock(&todo_lock);
 
-    (void)write(client_fd, response, strlen(response));
+    // write() 반환값 체크
+    ssize_t nw = write(client_fd, response, strlen(response));
+    if (nw < 0) {
+        perror("write to client failed");
+    }
     close(client_fd);
 }
 

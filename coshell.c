@@ -101,16 +101,26 @@ static char tz1_label[16] = "USA ET";
 static char tz2_label[16] = "UK GMT";
 
 // 로비 텍스트
-static const char* lobby_text[] = {
+static const char *lobby_text[] = {
     "Welcome!",
-    "CoShell: terminal-based collaboration toolbox.",
+    "CoShell, short for \"cooperation in Shell,\" is a terminal-based collaboration toolbox.",
+    "With To-Do List Management, you can share plans with your team members,",
+    "exchange information via real-time chat,",
+    "and transmit data using QR codes for groundbreaking data transfer.",
+    "",
+    "Enter a command below to start collaborating:",
+    "",
     "1. To-Do List Management",
     "2. Chat",
     "3. QR Code",
     "4. Setting Time",
     "",
-    "Type 'exit' to quit at any time."
+    "You can exit the program at any time by typing exit",
+    "",
+    "If the screen breaks for a moment, press the space key or minimize and then maximize the window again."
 };
+
+
 static const int lobby_lines = sizeof(lobby_text) / sizeof(lobby_text[0]);
 
 // State structs for modes
@@ -858,13 +868,14 @@ static void handle_chat_mode(ChatState* state, int* mode) {
         memset(state->port_str, 0, sizeof(state->port_str));
         memset(state->nickname, 0, sizeof(state->nickname));
         // argv[0]부터 프로그램 전체를 execvp로 덮어쓴다
+	cleanup_ncurses();
         char* argv_new[] = { "./coshell", "ui", NULL };
         execvp(argv_new[0], argv_new);
 
     }
 }
 
-/* Handle QR path input mode */
+/*      Handle QR path input mode     */
 static void handle_qr_input_mode(QRInputState* qr_state, int* mode) {
     werase(win_custom);
     box(win_custom, 0, 0);
@@ -911,22 +922,23 @@ static void handle_qr_input_mode(QRInputState* qr_state, int* mode) {
     }
 }
 
-/* Handle QR full-screen mode */
+
 static void handle_qr_full_mode(QRInputState* qr_state, int* mode) {
-    // 1) QR 전체화면 출력
+    // 1) curses 기반으로 전체화면 QR 그리기 (내부에서 'q'를 기다렸다가 리턴)
     process_and_show_file(win_custom, qr_state->pathbuf);
 
-    // 2) 사용자가 ‘q’를 누르면 프로그램을 다시 실행
-    endwin();   // ncurses 세션 종료
+    // 2) ncurses 윈도우/모드 정리
+    cleanup_ncurses();
 
-    // argv[0]부터 프로그램 전체를 execvp로 덮어쓴다
+    // 3) execvp로 UI 다시 실행 (로비)
     char* argv_new[] = { "./coshell", "ui", NULL };
     execvp(argv_new[0], argv_new);
 
-    // execvp가 실패하면 여기에 옴
+    // execvp 실패 시
     perror("execvp failed");
     exit(1);
 }
+
 
 /*==============================*/
 /*   ncurses 초기화/정리/리사이즈 */
