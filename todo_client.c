@@ -1,7 +1,7 @@
-/*========================================
- *          ToDo 클라이언트 모듈
- *     - 서버 연결 및 명령 전송 처리
- *========================================*/
+/*========================================*/
+/*          ToDo 클라이언트 모듈          */
+/*     - 서버 연결 및 명령 전송 처리      */
+/*========================================*/
 
 #define _POSIX_C_SOURCE 200809L
 
@@ -13,9 +13,10 @@
 #include <arpa/inet.h>
 #include <errno.h>
 
-
-
-
+/*==============================================*/
+/*   ToDo 명령 전송 → 서버 응답 받아오기 함수   */
+/*     - 팀 서버에 명령어 전송 후 응답 저장     */
+/*==============================================*/
 int send_todo_command(const char* cmd, char* response, size_t size) {
     // 1) 새 소켓 열기
     int sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -27,7 +28,7 @@ int send_todo_command(const char* cmd, char* response, size_t size) {
     // 2) 서버에 연결
     struct sockaddr_in addr = {
         .sin_family = AF_INET,
-        .sin_port = htons(TEAM_PORT),   // todo.h 에 정의된 포트
+        .sin_port = htons(TEAM_PORT), // todo.h 에 정의된 포트
     };
     inet_pton(AF_INET, TEAM_IP, &addr.sin_addr);
     if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
@@ -65,24 +66,26 @@ int send_todo_command(const char* cmd, char* response, size_t size) {
 void parse_todo_list(const char* response) {
     pthread_mutex_lock(&todo_lock);
 
-    // 이전에 저장된 ToDo 항목 해제
+    // 1) 기존 ToDo 항목 모두 해제
     for (int i = 0; i < MAX_TODO; i++) {
         free(todos[i]);
         todos[i] = NULL;
     }
     todo_count = 0;
-
+	
+    // 2) 응답이 비어 있으면 바로 종료
     if (response == NULL || *response == '\0') {
         pthread_mutex_unlock(&todo_lock);
         return;
     }
 
+    // 3) 응답 문자열 복사 및 줄 단위 파싱
     char* copy = strdup(response);
     if (copy) {
         char* line = strtok(copy, "\n");
         while (line && todo_count < MAX_TODO) {
             todos[todo_count++] = strdup(line);
-            line = strtok(NULL, "\n");
+            line = strtok(NULL, "\n"); // 한 줄씩 ToDo에 저장
         }
         free(copy);
     }
