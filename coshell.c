@@ -7,19 +7,22 @@
  *    4) ncurses UI: 분할 창, 버튼, 로비 → ToDo/Chat/QR 전환
  *
  * 빌드 예시:
- *   gcc coshell.c chat.c todo_ui.c todo_core.c todo_client.c qr.c -o coshell -Wall -O2 -std=c11 -lncursesw -lpthread
+ *   gcc coshell.c chat.c todo_core.c todo_client.c qr.c -o coshell -Wall -O2 -std=c11 -lncursesw -lpthread
  *
  * 사용 패키지 (Ubuntu/Debian):
  *   sudo apt update
  *   sudo apt install -y libncursesw5-dev qrencode
  *
  * 실행 방식:
- *   ./coshell                  # 메뉴/CLI/UI 모드 선택
- *   ./coshell server           # Chat 서버 (Serveo 터널링 포함)
- *   ./coshell add <item>       # CLI 모드: ToDo 추가
- *   ./coshell list             # CLI 모드: ToDo 목록 출력
- *   ./coshell del <index>      # CLI 모드: ToDo 삭제
- *   ./coshell qr <filepath>    # CLI 모드: ASCII QR 출력
+ *   ./coshell                      # 메뉴/CLI/UI 모드 선택
+ *   ./coshell server               # Chat 서버 (Serveo 터널링 포함)
+ *   ./coshell add  <item>          # CLI 모드: ToDo 추가
+ *   ./coshell done <index>         # CLI 모드: ToDo done
+ *   ./coshell undo <index>         # CLI 모드: ToDo undo
+ *   ./coshell del  <index>         # CLI 모드: ToDo 삭제
+ *   ./coshell edit <index> <item>  # CLI 모드: ToDo 수정
+ *   ./coshell list                 # CLI 모드: ToDo 목록 출력
+ *   ./coshell qr   <filepath>      # CLI 모드: ASCII QR 출력
  */
 
 #define _POSIX_C_SOURCE 200809L
@@ -41,8 +44,6 @@
 #include "todo.h"
 #include "qr.h"
 
-
-
 #define MAX_CLIENTS   5
 #define BUF_SIZE      1024
 #define INPUT_HEIGHT  3
@@ -60,15 +61,15 @@
 #define MODE_QR_FULL    4
 #define MODE_TZ         5
 
-WINDOW* win_time = NULL;  // 왼쪽 상단: 시간 표시
+WINDOW* win_time = NULL;    // 왼쪽 상단: 시간 표시
 WINDOW* win_custom = NULL;  // 왼쪽 중간/하단: 로비·Chat·QR
-WINDOW* win_todo = NULL;  // 오른쪽 전체: ToDo 목록
-WINDOW* win_input = NULL;  // 맨 아래: 커맨드 입력창
+WINDOW* win_todo = NULL;    // 오른쪽 전체: ToDo 목록
+WINDOW* win_input = NULL;   // 맨 아래: 커맨드 입력창
 
 volatile sig_atomic_t resized = 0;   // 터미널 리사이즈 감지 플래그
 volatile int chat_running = 0;       // 채팅 모드 활성화 플래그
 
-// ─── TimeZone 설정용 자료구조 ─────────────────
+/* ───────── TimeZone 설정용 자료구조 ────────── */
 typedef struct {
     char buf[16];
     int  len;
@@ -77,7 +78,7 @@ typedef struct {
 typedef struct {
     const char *code;   // internal key (안 써도 무방)
     const char *label;  // 화면에 찍을 이름
-    int          offset;// UTC로부터의 초 단위 오프셋
+    int        offset;  // UTC로부터의 초 단위 오프셋
 } TZOption;
 
 static const TZOption tzOptions[] = {
@@ -100,6 +101,7 @@ static int  tz2_offset = tzOptions[2].offset;
 static char tz1_label[16] = "USA ET";
 static char tz2_label[16] = "UK GMT";
 
+
 // 로비 텍스트
 static const char *lobby_text[] = {
     "Welcome!",
@@ -110,15 +112,14 @@ static const char *lobby_text[] = {
     "1. To-Do List Management",
     "2. Chat",
     "3. QR Code",
-    "4. Setting Time",
+    "4. Time Setting",
     "",
     "You can exit the program at any time by typing exit",
     "",
     "If the screen breaks for a moment, press the space key or minimize and then maximize the window again."
 };
-
-
 static const int lobby_lines = sizeof(lobby_text) / sizeof(lobby_text[0]);
+
 
 // State structs for modes
 typedef struct {
@@ -138,6 +139,7 @@ typedef struct {
     int pathlen;
     char pathbuf[MAX_PATH_LEN + 1];
 } QRInputState;
+
 
 /*==============================*/
 /*        함수 전방 선언        */
@@ -168,6 +170,7 @@ static void ui_main(void);
 // Serveo 터널 (Chat 서버용)
 static int setup_serveo_tunnel(int local_port);
 
+
 /*==============================*/
 /*          main 함수           */
 /*==============================*/
@@ -178,14 +181,16 @@ int main(int argc, char* argv[]) {
         show_main_menu();
     }
     else if (strcmp(argv[1], "add") == 0 ||
+        strcmp(argv[1], "done") == 0 ||
+        strcmp(argv[1], "undo") == 0 ||
+        strcmp(argv[1], "del") == 0 ||	
+        strcmp(argv[1], "edit") == 0 ||
         strcmp(argv[1], "list") == 0 ||
-        strcmp(argv[1], "del") == 0 ||
         strcmp(argv[1], "qr") == 0)
     {
         cli_main(argc - 1, &argv[1]);
     }
     else if (strcmp(argv[1], "ui") == 0) {
-
         ui_main();
     }
     else if (strcmp(argv[1], "server") == 0) {
@@ -197,7 +202,6 @@ int main(int argc, char* argv[]) {
         else {
             printf(">> Serveo Chat 주소: serveo.net:%d → 내부 %d 포트\n", remote_port, LOCAL_PORT);
         }
-
 
         chat_server(LOCAL_PORT);
     }
@@ -237,17 +241,12 @@ static void show_main_menu(void) {
             }
             else {
                 printf(">> Serveo Chat 주소: serveo.net:%d\n", remote_port);
-
             }
-
-
 
             chat_server(LOCAL_PORT);
             break;
         }
         else if (choice == 2) {
-
-
             ui_main();
             break;
         }
@@ -269,12 +268,7 @@ static void cli_main(int argc, char* argv[]) {
     if (argc == 0) return;
     load_todo();
 
-    if (strcmp(argv[0], "list") == 0) {
-        for (int i = 0;i < todo_count;i++) {
-            printf("%d. %s\n", i + 1, todos[i]);
-        }
-    }
-    else if (strcmp(argv[0], "add") == 0 && argc >= 2) {
+    if (strcmp(argv[0], "add") == 0 && argc >= 2) {
         char buf[512] = { 0 };
         for (int i = 1;i < argc;i++) {
             strcat(buf, argv[i]);
@@ -282,6 +276,16 @@ static void cli_main(int argc, char* argv[]) {
         }
         add_todo(buf);
         printf("Added: %s\n", buf);
+    }
+    else if (strcmp(argv[0], "done") == 0 && argc == 2) {
+        int idx = atoi(argv[1]);
+        done_todo(idx);
+        printf("Marked todo #%d as done.\n", idx);
+    }
+    else if (strcmp(argv[0], "undo") == 0 && argc == 2) {
+        int idx = atoi(argv[1]);
+        undo_todo(idx);
+        printf("Marked todo #%d as not done.\n", idx);
     }
     else if (strcmp(argv[0], "del") == 0 && argc == 2) {
         int idx = atoi(argv[1]) - 1;
@@ -305,6 +309,21 @@ static void cli_main(int argc, char* argv[]) {
         pthread_mutex_unlock(&todo_lock);
         printf("Deleted todo #%d\n", idx + 1);
     }
+    else if (strcmp(argv[0], "edit") == 0 && argc >= 3) {
+        int idx = atoi(argv[1]);
+        char new_content[512] = { 0 };
+        for (int i = 2; i < argc; i++) {
+            strcat(new_content, argv[i]);
+            if (i < argc - 1) strcat(new_content, " ");
+        }
+        edit_todo(idx, new_content);
+        printf("Edited todo #%d: %s\n", idx, new_content);
+    }	
+    else if (strcmp(argv[0], "list") == 0) {
+        for (int i = 0;i < todo_count;i++) {
+            printf("%d. %s\n", i + 1, todos[i]);
+        }
+    }
     else if (strcmp(argv[0], "qr") == 0 && argc == 2) {
         show_qr_cli(argv[1]);
     }
@@ -326,7 +345,7 @@ static void ui_main(void) {
     initscr();
     cbreak();
     noecho();
-    keypad(stdscr, TRUE);    // stdscr에도 KEY_RESIZE 이벤트를 전달
+    keypad(stdscr, TRUE); // stdscr에도 KEY_RESIZE 이벤트를 전달
     curs_set(1);
 
     // 첫 화면: 로비
@@ -524,8 +543,6 @@ static void ui_main(void) {
                     continue;
                 }
 
-
-
                 // a <item> → ToDo 항목 추가 (비대화형 모드)
                 else if (cmdlen > 2 && cmdbuf[0] == 'a' && cmdbuf[1] == ' ') {
                     const char* item = cmdbuf + 2;
@@ -582,10 +599,10 @@ static void ui_main(void) {
     }
 
     endwin();  // ncurses 종료
-          endwin();
-          echo();
-          nocbreak();
-          curs_set(1);
+    endwin();
+    echo();
+    nocbreak();
+    curs_set(1);
 }
 
 /* Handle ToDo mode input */
@@ -864,15 +881,15 @@ static void handle_chat_mode(ChatState* state, int* mode) {
         memset(state->host, 0, sizeof(state->host));
         memset(state->port_str, 0, sizeof(state->port_str));
         memset(state->nickname, 0, sizeof(state->nickname));
-        // argv[0]부터 프로그램 전체를 execvp로 덮어쓴다
+        
+	// argv[0]부터 프로그램 전체를 execvp로 덮어쓴다
         cleanup_ncurses();
         char* argv_new[] = { "./coshell", "ui", NULL };
         execvp(argv_new[0], argv_new);
-
     }
 }
 
-/*      Handle QR path input mode     */
+/* Handle QR path input mode */
 static void handle_qr_input_mode(QRInputState* qr_state, int* mode) {
     werase(win_custom);
     box(win_custom, 0, 0);
@@ -919,7 +936,6 @@ static void handle_qr_input_mode(QRInputState* qr_state, int* mode) {
     }
 }
 
-
 static void handle_qr_full_mode(QRInputState* qr_state, int* mode) {
     // 1) curses 기반으로 전체화면 QR 그리기 (내부에서 'q'를 기다렸다가 리턴)
     process_and_show_file(win_custom, qr_state->pathbuf);
@@ -946,7 +962,6 @@ static void cleanup_ncurses(void) {
     if (win_todo) { delwin(win_todo);   win_todo = NULL; }
     if (win_input) { delwin(win_input);  win_input = NULL; }
     endwin();
-
 }
 
 /*==============================*/
