@@ -48,7 +48,7 @@
 
 * ✅ **World Clock**  
   When collaborating, you can fix the current Local time zone and set up to 2 world time zones, considering members in different time zones.
-  When you press function 4, the world time zones that can be changed will appear, and you can enter the index of the time zone to be changed (index 1, 2 in order of time zones under Local) and enter the index of the time to be changed.     Initially, USA ET and UK GMT are set. For example, if you want to change the USA ET time zone to JP JST, enter "1 9" to change it.
+  When you press function 4, the world time zones that can be changed will appear, and you can enter the index of the time zone to be changed (index 1, 2 in order of time zones under Local) and enter the index of the time to be changed.    
 
 * ✅ **CLI Mode Support**  
   You can use all ToDo features directly via CLI without launching the UI.  
@@ -105,10 +105,92 @@ After launching `./coshell`, you'll see the following options:
    * Press `2` to enter the main ncurses-based interface.
    * Once inside the UI, you'll see options like:
 
+
+
      * 📝 **ToDo Mode**: Manage your local task list. (Press `1`)
+
+Press 1 to access the following commands:
+add <item>
+done <num>
+undo <num>
+del <num>
+edit <num> <new item>
+
+Below is an example managing an item called "foo":
+
+1. In coshell’s command line at the very bottom, type:
+   add foo
+   You’ll see "1. foo [ ]" appear in the To‑Do List on the right. Each time you add an item, its index number on the left increments by one.
+
+2. Once you’ve completed the task, type:
+   done 1
+   The first item will be marked as done, showing:
+   1. foo [x]
+
+3. If you change your mind, type:
+   undo 1
+   to remove the checkmark.
+
+4. To delete an item, type:
+   del 1
+   (with a space after "del"), and the item at index 1 will be removed.
+
+5. To rename an item, type:
+   edit 1 flag
+   which changes "foo" at index 1 into "flag", for example:
+   1. flag [ ]
+6. At any time, type `q` to return to the lobby.
+
+  
      * 💬 **Chat Mode**: Chat with other users in real time. (Press `2`)
+
+Press 2 to start the chat feature:
+
+1. You will be prompted for the chat host. Since coshell uses Serveo, enter:
+   serveo.net
+
+2. Next, enter the port number created when you started the coshell server, immediately followed (no spaces) by the nickname you want to use in chat.
+
+3. You can then chat with your team members—and at the same time use the To-Do List commands. Just prepend a slash ("/") to any To-Do command exactly as before, for example:
+   /add foo
+   /del 1
+   /done 1
+
+4. At any point during the chat, type:
+   /quit
+   to return to the lobby.
+
+       
      * 📷 **QR Mode**: Generate QR codes from files or text input. (Press `3`)
+  
+Press 3 to generate and read QR codes from text-based files (e.g., C source or .txt):
+
+1. Enter the absolute Linux path of the file you wish to convert, for example:
+   /home/user/temp/foo.c
+
+2. After entering the path, press any key to generate and display the QR code.  
+   Press `q` to return to the lobby.
+
+Note: Since QR code dimensions grow with file size, maximize your terminal window first to avoid clipping. To accommodate different device display sizes, QR generation is limited to files no larger than 700 bytes. If your file exceeds 700 bytes, the tool will show its size and display an error indicating the limit has been exceeded, so you can confirm compatibility.
+
+
+
      * 🌐 **Clock Mode**: Set and display global time zones alongside your local time. (Press `4`)
+
+Press 4 to change the timezones displayed at the top of CoShell:
+
+The Timebox’s Local time is fixed, but the two initially set zones (USA ET and UK GMT) can be modified.
+
+1. After pressing 4, a list of available timezones will appear.
+2. Under the Timebox’s Local time, the two slots for additional timezones are indexed as 1 and 2.
+3. Use these indexes to place your desired timezone into the corresponding slot.  
+   For example, option 9 represents Japan JST. To replace USA ET (slot 1) with JST, enter:
+   1 9
+
+At any time, press `q` to return to the lobby.
+
+
+
 
 
    **💬 Chat Mode details:**
@@ -128,7 +210,7 @@ After launching `./coshell`, you'll see the following options:
 
    * ⚠️ Ensure the chat server is already running before connecting.
 
-3. **CLI Mode**
+4. **CLI Mode**
 
    * You can use CoShell’s ToDo functionality without UI like this:
      ```bash
