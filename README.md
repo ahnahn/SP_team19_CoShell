@@ -42,8 +42,9 @@
   You can also use chat commands like `/add`, `/del`, `/edit` to manage tasks live during conversation.
 
 * ✅ **QR Generator**  
-  Input an absolute path → outputs fullscreen QR code for easy file/data sharing.  
-  Data over 700 bytes is automatically rejected to avoid terminal overflow.
+  You can distribute data as QR in conference rooms, study rooms, etc. without running a chat or file server, so there is no cumbersome upload or download process.
+  QR code To create, enter the absolute path of Linux. However, the QR size is determined by the size of the data, so you must maximize the terminal and use this function.
+  The maximum data that the QR can contain is 2.9KB, but the QR code may be too large and may be cut off in the Linux window depending on the device, so it was limited to 700KB.
 
 * ✅ **World Clock**  
   Track your local time and up to two other world time zones.  
