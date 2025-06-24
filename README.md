@@ -26,7 +26,7 @@
 > It enables seamless teamwork directly from the terminal, removing the need for external GUI tools.  
 > Whether you're managing tasks, chatting in real-time, or sharing data over QR, everything happens right in your terminal.
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 
 ---
 
@@ -60,7 +60,7 @@
   ./coshell del 1
   ```
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 
 ---
 
@@ -82,7 +82,7 @@ make
 ./coshell
 ```
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 
 ---
 
@@ -119,7 +119,7 @@ After launching `./coshell`, you'll see the following options:
 
    * Each command prints a clear result or error message to the terminal.
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 
 ---
 
@@ -133,7 +133,7 @@ After launching `./coshell`, you'll see the following options:
   </tr>
 </table>
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 
 ---
 
