@@ -22,7 +22,9 @@
 
 ## 🧠 About The Project
 
-> **CoShell** is a terminal-based collaboration toolbox designed for CLI-first teamwork. It eliminates the need for external GUI collaboration tools by integrating core features into a single terminal UI.
+> **CoShell** (Cooperating in Shell) is a terminal-based collaboration toolbox.  
+> It enables seamless teamwork directly from the terminal, removing the need for external GUI tools.  
+> Whether you're managing tasks, chatting in real-time, or sharing data over QR, everything happens right in your terminal.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -30,12 +32,33 @@
 
 ## ✨ Features
 
-* ✅ **To-Do List**: Create, complete, undo, delete, and edit tasks in a local user list.
-* ✅ **Chat**: Real-time terminal chat with nickname and port customization.
-* ✅ **QR Generator**: Generate QR codes for quick sharing of small data.
-* ✅ **World Clock**: Track local and global time zones within the UI.
-* ✅ **CLI Mode Support**: All features can also be used in CLI-based interaction without entering the UI mode.
+* ✅ **To-Do List**  
+  Add, complete, undo, delete, and edit tasks in a personal task list.  
+  The list is displayed on the left pane of the UI.
 
+* ✅ **Chat**  
+  Real-time terminal chat between team members.  
+  Users can enter a nickname and custom port.  
+  You can also use chat commands like `/add`, `/del`, `/edit` to manage tasks live during conversation.
+
+* ✅ **QR Generator**  
+  Input an absolute path → outputs fullscreen QR code for easy file/data sharing.  
+  Data over 700 bytes is automatically rejected to avoid terminal overflow.
+
+* ✅ **World Clock**  
+  Track your local time and up to two other world time zones.  
+  You can set or change the world clocks using simple input like `1 9` (e.g., change ET to JST).
+
+* ✅ **CLI Mode Support**  
+  You can use all ToDo features directly via CLI without launching the UI.  
+  For example:
+  ```bash
+  ./coshell add "Fix README formatting"
+  ./coshell done 3
+  ./coshell list
+  ./coshell edit 2 "Update contribution section"
+  ./coshell del 1
+  ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -45,7 +68,13 @@
 
 ### 🔧 Prerequisites
 
-* OS: Linux/Unix
+* OS: Linux / Unix / Windows WSL  
+* Dependencies: `ncurses`, `qrencode`  
+  Install on Debian-based systems:
+  ```bash
+  sudo apt update
+  sudo apt install libncurses-dev qrencode
+  ```
 
 ### 🏗 Build
 
@@ -67,31 +96,34 @@ make
 
 ### 🔘 Main Menu
 
-Upon running `./coshell`, the main menu offers the following options:
+After launching `./coshell`, you'll see the following options:
 
 1. **Start Chat Server with Serveo**
 
-   * Automatically opens a Serveo tunnel to expose your localhost.
-   * ⚠️ If Serveo is blocked or unavailable, fallback to `localhost:12345`.
+   * Opens a tunnel with [serveo.net](https://serveo.net) to make your chat server accessible.
+   * ⚠️ If Serveo is unavailable (e.g., blocked on your network), the server will fall back to `localhost:12345`.
 
 2. **Launch CoShell UI**
 
-   * Terminal-based ncurses UI with the following modes:
+   * Enter the main ncurses-based interface with:
+     * 📝 **ToDo Mode**: Manage your local task list.
+     * 💬 **Chat Mode**: Chat with other users in real time.
+     * 📷 **QR Mode**: Generate QR codes from files or text input.
+     * 🌐 **Clock Mode**: Set and display global time zones alongside your local time.
 
-     * **ToDo Mode**: Manage your personal or team ToDo list.
-     * **Chat Mode**: Connect with team via terminal chat interface.
-     * **QR Generator**: Input absolute path → outputs fullscreen QR.
-     * **World Clock Mode**: Adjust and view time zones for remote members.
+3. **CLI Mode (Headless)**
 
-3. **CLI Mode**
-
-   * Use `todo_client` or other tools to interact with the ToDo features outside the UI.
-   * Example:
-
+   * You can use CoShell’s ToDo functionality without UI like this:
      ```bash
-     ./todo_client add "Fix README formatting"
-     ./todo_client list
+     ./coshell add "Implement global clock"
+     ./coshell list
+     ./coshell done 2
+     ./coshell undo 2
+     ./coshell edit 2 "Fix bug in clock rendering"
+     ./coshell del 2
      ```
+
+   * Each command prints a clear result or error message to the terminal.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -114,7 +146,6 @@ Upon running `./coshell`, the main menu offers the following options:
 ## 🙏 Acknowledgments
 
 * [Best-README-Template](https://github.com/othneildrew/Best-README-Template)
-* [Img Shields](https://shields.io)
 * [Ncurses Library](https://invisible-island.net/ncurses/)
 * [qrencode](https://fukuchi.org/works/qrencode/)
 
