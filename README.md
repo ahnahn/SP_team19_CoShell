@@ -1,6 +1,4 @@
-물론입니다! 아래는 말씀하신 내용을 반영하여 `README.md` 전체 원형을 유지하면서 **채팅 진입 시 호스트/포트 입력 방식 및 서버가 먼저 열려 있어야 한다는 설명을 추가한 버전**입니다.
 
-````markdown
 <a id="readme-top"></a>
 
 <div align="center">
@@ -55,13 +53,13 @@
 * ✅ **CLI Mode Support**  
   You can use all ToDo features directly via CLI without launching the UI.  
   For example:
-  ```bash
+
   ./coshell add "Fix README formatting"
   ./coshell done 3
   ./coshell list
   ./coshell edit 2 "Update contribution section"
   ./coshell del 1
-````
+
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
