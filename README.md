@@ -22,8 +22,8 @@
 
 ## 🧠 About The Project
 
-> **CoShell** (Cooperating in Shell) is a terminal-based collaboration toolbox.
-> It enables seamless teamwork directly from the terminal, removing the need for external GUI tools.
+> **CoShell** (Cooperating in Shell) is a terminal-based collaboration toolbox.  
+> It enables seamless teamwork directly from the terminal, removing the need for external GUI tools.  
 > Whether you're managing tasks, chatting in real-time, or sharing data over QR, everything happens right in your terminal.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -32,31 +32,33 @@
 
 ## ✨ Features
 
-* ✅ **To-Do List**
-  Add, complete, undo, delete, and edit tasks in a personal task list.
+* ✅ **To-Do List**  
+  Add, complete, undo, delete, and edit tasks in a personal task list.  
   The list is displayed on the left pane of the UI.
 
-* ✅ **Chat**
-  Real-time terminal chat between team members.
-  Users can enter a nickname and custom port.
+* ✅ **Chat**  
+  Real-time terminal chat between team members.  
+  Users can enter a nickname and custom port.  
   You can also use chat commands like `/add`, `/del`, `/edit` to manage tasks live during conversation.
 
-* ✅ **QR Generator**
-  Input an absolute path → outputs fullscreen QR code for easy file/data sharing.
+* ✅ **QR Generator**  
+  Input an absolute path → outputs fullscreen QR code for easy file/data sharing.  
   Data over 700 bytes is automatically rejected to avoid terminal overflow.
 
-* ✅ **World Clock**
-  Track your local time and up to two other world time zones.
+* ✅ **World Clock**  
+  Track your local time and up to two other world time zones.  
   You can set or change the world clocks using simple input like `1 9` (e.g., change ET to JST).
 
-* ✅ **CLI Mode Support**
-  You can use all ToDo features directly via CLI without launching the UI.
+* ✅ **CLI Mode Support**  
+  You can use all ToDo features directly via CLI without launching the UI.  
   For example:
+  ```bash
   ./coshell add "Fix README formatting"
   ./coshell done 3
   ./coshell list
   ./coshell edit 2 "Update contribution section"
   ./coshell del 1
+  ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -66,15 +68,19 @@
 
 ### 🔧 Prerequisites
 
-* OS: Linux / Unix / Windows WSL
+* OS: Linux / Unix / Windows WSL  
 
 ### 🏗 Build
 
+```bash
 make
+```
 
 ### 🚀 Run
 
+```bash
 ./coshell
+```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -88,42 +94,28 @@ After launching `./coshell`, you'll see the following options:
 
 1. **Start Chat Server with Serveo**
 
-   * Opens a tunnel with [serveo.net](https://serveo.net) to make your chat server externally accessible.
+   * Opens a tunnel with [serveo.net](https://serveo.net) to make your chat server accessible.
    * ⚠️ If Serveo is unavailable (e.g., blocked on your network), the server will fall back to `localhost:12345`.
-   * This must be run **before** attempting to join a chat room as a client.
 
 2. **Launch CoShell UI**
 
    * Enter the main ncurses-based interface with:
-
      * 📝 **ToDo Mode**: Manage your local task list.
      * 💬 **Chat Mode**: Chat with other users in real time.
-
-       * 🔑 **How to Join Chat Room**:
-
-         1. You will be prompted to enter a **host address**.
-
-            * If you're using Serveo, enter: `serveo.net`
-            * If you're using local testing, enter: `localhost`
-         2. Next, enter the **port number**:
-
-            * For `localhost`, enter: `12345`
-            * For `serveo.net`, enter the port number assigned to you when you selected `1. Start Chat Server with Serveo` (e.g., `45678`)
-         3. Then, set your nickname.
-
-       * ⚠️ **Note:** Make sure the server is already running **before** attempting to connect as a client.
      * 📷 **QR Mode**: Generate QR codes from files or text input.
      * 🌐 **Clock Mode**: Set and display global time zones alongside your local time.
 
 3. **CLI Mode (Headless)**
 
    * You can use CoShell’s ToDo functionality without UI like this:
+     ```bash
      ./coshell add "Implement global clock"
      ./coshell list
      ./coshell done 2
      ./coshell undo 2
      ./coshell edit 2 "Fix bug in clock rendering"
      ./coshell del 2
+     ```
 
    * Each command prints a clear result or error message to the terminal.
 
