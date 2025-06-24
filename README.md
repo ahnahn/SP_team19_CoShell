@@ -1,94 +1,136 @@
 <a id="readme-top"></a>
 
-<!-- PROJECT SHIELDS -->
-[![Contributors][contributors-shield]][contributors-url]
-[![License][license-shield]][license-url]
+# 📟 CoShell
 
-<!-- PROJECT LOGO -->
-<br />
 <div align="center">
-  <h3 align="center">📋 CoShell ToDo 협업 시스템</h3>
+  <img src="https://github.com/ahnahn.png" alt="ahnahn" width="80" height="80" style="border-radius: 50px;">
+  <img src="https://github.com/GeonwooLee21.png" alt="GeonwooLee21" width="80" height="80" style="border-radius: 50px;">
+  <img src="https://github.com/lyjae.png" alt="lyjae" width="80" height="80" style="border-radius: 50px;">
+</div>
 
-  <p align="center">
-    readme 테스트 ncurses 기반 협업 ToDo 관리 시스템<br/>
-    로컬 모드 & 서버 연동 모드 지원!
-    <br />
-    <br />
-    <a href="#demo">View Demo</a>
-    ·
-    <a href="https://github.com/your_username/coshell-todo/issues">Report Bug</a>
-    ·
-    <a href="https://github.com/your_username/coshell-todo/issues">Request Feature</a>
-  </p>
+<div align="center">
+  <h3 align="center">CoShell</h3>
+  <p align="center">A Terminal-Based Collaboration Toolbox</p>
+  <a href="https://www.youtube.com/watch?v=-Ow-Q8T48PY"><strong>🎥 Watch Demo</strong></a>
+  <br />
 </div>
 
 ---
 
-## 📌 Table of Contents
+## 📋 Table of Contents
 
-- [About The Project](#about-the-project)
-  - [Features](#features)
-  - [Built With](#built-with)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Build & Run](#build--run)
-- [Usage](#usage)
-- [Demo](#demo)
-- [Contact](#contact)
-- [Acknowledgments](#acknowledgments)
+* [About The Project](#about-the-project)
+* [Features](#features)
+* [Build & Run](#build--run)
+* [Usage Guide](#usage-guide)
+* [Contributors](#contributors)
+* [Acknowledgments](#acknowledgments)
 
 ---
 
-## 💡 About The Project
+## 🧠 About The Project
 
-**CoShell ToDo 시스템**은 팀 협업을 위한 터미널 기반 ToDo 관리 도구입니다. `ncurses`를 기반으로 하는 UI를 제공하며, 로컬 파일 기반의 개인 모드와 소켓 통신 기반의 팀 협업 모드를 전환할 수 있습니다.
-
-이 프로젝트는 팀원 간 **작업 목록 공유**, **간단한 명령어 기반 조작**, 그리고 **UI 명확성**에 중점을 두고 개발되었습니다.
-
-### ✅ Features
-
-- [x] `ncurses` 기반 UI
-- [x] 로컬 파일 기반 ToDo 저장/불러오기
-- [x] TCP 소켓 기반 서버 연동 (`team` 모드)
-- [x] 커맨드: `add`, `done`, `undo`, `del`, `edit`, `team`, `user`
-- [x] 완료 항목 체크 표시 `[x]`/`[ ]`
-- [x] `pthread` 기반 Mutex로 데이터 보호
-
-### 🛠 Built With
-
-- C (POSIX)
-- ncurses
-- pthread
-- TCP Socket Programming
+> **CoShell** is a terminal-based collaboration toolbox designed for CLI-first teamwork. It eliminates the need for external GUI collaboration tools by integrating core features into a single terminal UI.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ---
 
-## 🚀 Getting Started
+## ✨ Features
 
-이 프로젝트는 Linux 환경에서 `make`를 사용해 쉽게 빌드하고 실행할 수 있습니다.
+* ✅ **To-Do List**: Create, complete, undo, delete, and edit tasks in a shared team list or local user list.
+* ✅ **Chat**: Real-time terminal chat with nickname and port customization.
+* ✅ **QR Generator**: Generate QR codes for quick sharing of small data.
+* ✅ **World Clock**: Track local and global time zones within the UI.
+* ✅ **CLI Mode Support**: All features can also be used in CLI-based interaction without entering the UI mode.
 
+> ⚠️ `team` / `user` commands are currently disabled in the CoShell interface.
 
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
+---
 
-readme 테스트
-### 📦 Prerequisites
+## 🛠 Build & Run
 
-- `gcc`
-- `make`
-- `libncurses-dev`
-- `libpthread`
+### 🔧 Prerequisites
 
-### 🔧 Build & Run
+* OS: Linux/Unix
+* Dependencies:
+
+  ```bash
+  sudo apt update
+  sudo apt install libncursesw5-dev qrencode
+  ```
+
+### 🏗 Build
 
 ```bash
-# 저장소 클론
-git clone https://github.com/your_username/coshell-todo.git
-cd coshell-todo
-
-# 빌드
 make
+```
 
-# 실행
+### 🚀 Run
+
+```bash
 ./coshell
+```
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+---
+
+## 🧭 Usage Guide
+
+### 🔘 Main Menu
+
+Upon running `./coshell`, the main menu offers the following options:
+
+1. **Start Chat Server with Serveo**
+
+   * Automatically opens a Serveo tunnel to expose your localhost.
+   * ⚠️ If Serveo is blocked or unavailable, fallback to `localhost:12345`.
+
+2. **Launch CoShell UI**
+
+   * Terminal-based ncurses UI with the following modes:
+
+     * **ToDo Mode**: Manage your personal or team ToDo list.
+     * **Chat Mode**: Connect with team via terminal chat interface.
+     * **QR Generator**: Input absolute path → outputs fullscreen QR.
+     * **World Clock Mode**: Adjust and view time zones for remote members.
+
+3. **CLI Mode**
+
+   * Use `todo_client` or other tools to interact with the ToDo features outside the UI.
+   * Example:
+
+     ```bash
+     ./todo_client add "Fix README formatting"
+     ./todo_client list
+     ```
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+---
+
+## 👥 Contributors
+
+<table>
+  <tr>
+    <td align="center"><a href="https://github.com/ahnahn"><img src="https://github.com/ahnahn.png" width="100px;" alt="ahn"/><br /><sub><b>ahnahn</b></sub></a></td>
+    <td align="center"><a href="https://github.com/GeonwooLee21"><img src="https://github.com/GeonwooLee21.png" width="100px;" alt="geonwoo"/><br /><sub><b>GeonwooLee21</b></sub></a></td>
+    <td align="center"><a href="https://github.com/lyjae"><img src="https://github.com/lyjae.png" width="100px;" alt="lyjae"/><br /><sub><b>lyjae</b></sub></a></td>
+  </tr>
+</table>
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+---
+
+## 🙏 Acknowledgments
+
+* [Best-README-Template](https://github.com/othneildrew/Best-README-Template)
+* [Img Shields](https://shields.io)
+* [Ncurses Library](https://invisible-island.net/ncurses/)
+* [qrencode](https://fukuchi.org/works/qrencode/)
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
