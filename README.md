@@ -41,9 +41,10 @@
   You can update the list in To-Do-List in real time using commands such as `/add`, `/del`, `/edit` while chatting with members in real time.
 
 * ✅ **QR Generator**  
-  You can distribute data as QR in conference rooms, study rooms, etc. without running a chat or file server, so there is no cumbersome upload or download process.
-  QR code To create, enter the absolute path of Linux. However, the QR size is determined by the size of the data, so you must maximize the terminal and use this function.
-  The maximum data that the QR can contain is 2.9KB, but the QR code may be too large and may be cut off in the Linux window depending on the device, so it was limited to 700KB.
+  In conference or study rooms, you can share data via QR codes without running a chat or file server, avoiding any cumbersome upload/download steps.
+  To generate a QR code, simply specify the absolute Linux path of the file you want to encode (e.g., a C source file or a plain‑text file).
+  Because the dimensions of the QR code grow with the amount of data, maximize your terminal window before using this feature.
+  A Version 40‑L QR code can hold up to about 2.9 KB of data, but depending on your device the QR image may become too large and get clipped in the Linux terminal window—so it’s limited to 700 bytes.
 
 * ✅ **World Clock**  
   When collaborating, you can fix the current Local time zone and set up to 2 world time zones, considering members in different time zones.
