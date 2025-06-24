@@ -3,12 +3,6 @@
 # 📟 CoShell
 
 <div align="center">
-  <img src="https://github.com/ahnahn.png" alt="ahnahn" width="80" height="80" style="border-radius: 50px;">
-  <img src="https://github.com/GeonwooLee21.png" alt="GeonwooLee21" width="80" height="80" style="border-radius: 50px;">
-  <img src="https://github.com/lyjae.png" alt="lyjae" width="80" height="80" style="border-radius: 50px;">
-</div>
-
-<div align="center">
   <h3 align="center">CoShell</h3>
   <p align="center">A Terminal-Based Collaboration Toolbox</p>
   <a href="https://www.youtube.com/watch?v=-Ow-Q8T48PY"><strong>🎥 Watch Demo</strong></a>
