@@ -1,7 +1,7 @@
 <a id="readme-top"></a>
 
 <div align="center">
-  <h5 align="center">CoShell</h5>
+  <h2 align="center">CoShell</h2>
   <p align="center">A Terminal-Based Collaboration Toolbox</p>
   <a href="https://www.youtube.com/watch?v=-Ow-Q8T48PY"><strong>🎥 Watch Demo</strong></a>
   <br />
