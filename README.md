@@ -105,7 +105,7 @@ After launching `./coshell`, you'll see the following options:
      * 📷 **QR Mode**: Generate QR codes from files or text input.
      * 🌐 **Clock Mode**: Set and display global time zones alongside your local time.
 
-3. **CLI Mode (Headless)**
+3. **CLI Mode**
 
    * You can use CoShell’s ToDo functionality without UI like this:
      ```bash
