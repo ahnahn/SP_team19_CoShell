@@ -127,7 +127,7 @@ After launching `./coshell`, you'll see the following options:
 
    * ⚠️ Ensure the chat server is already running before connecting.
 
-4. **CLI Mode**
+3. **CLI Mode**
 
    * You can use CoShell’s ToDo functionality without UI like this:
      ```bash
