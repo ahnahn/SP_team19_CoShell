@@ -69,12 +69,6 @@
 ### 🔧 Prerequisites
 
 * OS: Linux / Unix / Windows WSL  
-* Dependencies: `ncurses`, `qrencode`  
-  Install on Debian-based systems:
-  ```bash
-  sudo apt update
-  sudo apt install libncurses-dev qrencode
-  ```
 
 ### 🏗 Build
 
