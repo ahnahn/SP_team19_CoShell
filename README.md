@@ -11,12 +11,12 @@
 
 ## 📋 Table of Contents
 
-* [About The Project](#about-the-project)
-* [Features](#features)
-* [Build & Run](#build--run)
-* [Usage Guide](#usage-guide)
-* [Contributors](#contributors)
-* [Acknowledgments](#acknowledgments)
+* [About The Project](#-about-the-project)
+* [Features](#-features)
+* [Build & Run](#-build--run)
+* [Usage Guide](#-usage-guide)
+* [Contributors](#-contributors)
+* [Acknowledgments](#-acknowledgments)
 
 ---
 
