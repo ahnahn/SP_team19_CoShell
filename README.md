@@ -96,16 +96,38 @@ After launching `./coshell`, you'll see the following options:
 
    * Opens a tunnel with [serveo.net](https://serveo.net) to make your chat server accessible.
    * ⚠️ If Serveo is unavailable (e.g., blocked on your network), the server will fall back to `localhost:12345`.
+   * ✅ Press `1` to run this option.
+   * 🔁 Keep this server running before entering chat mode from the UI.
 
 2. **Launch CoShell UI**
 
-   * Enter the main ncurses-based interface with:
-     * 📝 **ToDo Mode**: Manage your local task list.
-     * 💬 **Chat Mode**: Chat with other users in real time.
-     * 📷 **QR Mode**: Generate QR codes from files or text input.
-     * 🌐 **Clock Mode**: Set and display global time zones alongside your local time.
+   * Press `2` to enter the main ncurses-based interface.
+   * Once inside the UI, you'll see options like:
 
-3. **CLI Mode**
+     * 📝 **ToDo Mode**: Manage your local task list. (Press `1`)
+     * 💬 **Chat Mode**: Chat with other users in real time. (Press `2`)
+     * 📷 **QR Mode**: Generate QR codes from files or text input. (Press `3`)
+     * 🌐 **Clock Mode**: Set and display global time zones alongside your local time. (Press `4`)
+
+
+   **💬 Chat Mode details:**
+
+   * After entering Chat Mode, you'll be prompted to enter:
+
+     1. **Host name** – Choose from:
+
+        * `serveo.net`: If you started the chat server with option 1.
+        * `localhost`: If Serveo is blocked or unavailable.
+     2. **Port number** – Depends on the host:
+
+        * If using `serveo.net`: Input the **Serveo-assigned port** (shown when option 1 is started).
+        * If using `localhost`: Input `12345`.
+
+   * Then enter your nickname to join the chat room.
+
+   * ⚠️ Ensure the chat server is already running before connecting.
+
+4. **CLI Mode**
 
    * You can use CoShell’s ToDo functionality without UI like this:
      ```bash
