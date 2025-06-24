@@ -139,7 +139,6 @@ After launching `./coshell`, you'll see the following options:
 
 ## 🙏 Acknowledgments
 
-* [Best-README-Template](https://github.com/othneildrew/Best-README-Template)
 * [Ncurses Library](https://invisible-island.net/ncurses/)
 * [qrencode](https://fukuchi.org/works/qrencode/)
 
