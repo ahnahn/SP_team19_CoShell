@@ -33,13 +33,12 @@
 ## ✨ Features
 
 * ✅ **To-Do List**  
-  Add, complete, undo, delete, and edit tasks in a personal task list.  
-  The list is displayed on the left pane of the UI.
+  You can record a list of tasks that team members need to do.
+  The list window is fixed on the left box of CoShell, and you can add, delete, and modify the list. You can also check the box next to the list to indicate whether it has already been completed or is in progress.
 
 * ✅ **Chat**  
-  Real-time terminal chat between team members.  
-  Users can enter a nickname and custom port.  
-  You can also use chat commands like `/add`, `/del`, `/edit` to manage tasks live during conversation.
+  Team members can chat in real time. You can enter the server port number and set a nickname to distinguish between members.
+  You can update the list in To-Do-List in real time using commands such as `/add`, `/del`, `/edit` while chatting with members in real time.
 
 * ✅ **QR Generator**  
   You can distribute data as QR in conference rooms, study rooms, etc. without running a chat or file server, so there is no cumbersome upload or download process.
