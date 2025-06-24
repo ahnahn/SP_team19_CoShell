@@ -47,8 +47,8 @@
   The maximum data that the QR can contain is 2.9KB, but the QR code may be too large and may be cut off in the Linux window depending on the device, so it was limited to 700KB.
 
 * ✅ **World Clock**  
-  Track your local time and up to two other world time zones.  
-  You can set or change the world clocks using simple input like `1 9` (e.g., change ET to JST).
+  When collaborating, you can fix the current Local time zone and set up to 2 world time zones, considering members in different time zones.
+  When you press function 4, the world time zones that can be changed will appear, and you can enter the index of the time zone to be changed (index 1, 2 in order of time zones under Local) and enter the index of the time to be changed.     Initially, USA ET and UK GMT are set. For example, if you want to change the USA ET time zone to JP JST, enter "1 9" to change it.
 
 * ✅ **CLI Mode Support**  
   You can use all ToDo features directly via CLI without launching the UI.  
