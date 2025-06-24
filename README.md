@@ -1,3 +1,6 @@
+물론입니다! 아래는 말씀하신 내용을 반영하여 `README.md` 전체 원형을 유지하면서 **채팅 진입 시 호스트/포트 입력 방식 및 서버가 먼저 열려 있어야 한다는 설명을 추가한 버전**입니다.
+
+````markdown
 <a id="readme-top"></a>
 
 <div align="center">
@@ -58,7 +61,7 @@
   ./coshell list
   ./coshell edit 2 "Update contribution section"
   ./coshell del 1
-  ```
+````
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -68,7 +71,7 @@
 
 ### 🔧 Prerequisites
 
-* OS: Linux / Unix / Windows WSL  
+* OS: Linux / Unix / Windows WSL
 
 ### 🏗 Build
 
@@ -100,14 +103,28 @@ After launching `./coshell`, you'll see the following options:
 2. **Launch CoShell UI**
 
    * Enter the main ncurses-based interface with:
+
      * 📝 **ToDo Mode**: Manage your local task list.
      * 💬 **Chat Mode**: Chat with other users in real time.
+
+       * ⚠️ Before entering Chat Mode, ensure the **chat server is already running** (via menu option 1 or a manual run).
+       * You'll be prompted to enter a **host name** and **port**:
+
+         * If using **Serveo** (e.g., after pressing `1` at main menu):
+
+           * Enter `serveo.net` as the host name.
+           * Then enter the **Serveo-assigned port number** that was shown when the server started.
+         * If Serveo is blocked or unavailable:
+
+           * Enter `localhost` as the host name.
+           * Then enter `12345` as the port number (the fallback default).
      * 📷 **QR Mode**: Generate QR codes from files or text input.
      * 🌐 **Clock Mode**: Set and display global time zones alongside your local time.
 
 3. **CLI Mode (Headless)**
 
    * You can use CoShell’s ToDo functionality without UI like this:
+
      ```bash
      ./coshell add "Implement global clock"
      ./coshell list
@@ -143,3 +160,4 @@ After launching `./coshell`, you'll see the following options:
 * [qrencode](https://fukuchi.org/works/qrencode/)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
+```
