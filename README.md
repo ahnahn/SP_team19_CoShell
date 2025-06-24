@@ -1,7 +1,7 @@
 <a id="readme-top"></a>
 
 <div align="center">
-  <h2 align="center">CoShell</h2>
+  <h1 align="center">CoShell</h1>
   <p align="center">A Terminal-Based Collaboration Toolbox</p>
   <a href="https://www.youtube.com/watch?v=-Ow-Q8T48PY"><strong>🎥 Watch Demo</strong></a>
   <br />
@@ -47,12 +47,6 @@
 ### 🔧 Prerequisites
 
 * OS: Linux/Unix
-* Dependencies:
-
-  ```bash
-  sudo apt update
-  sudo apt install libncursesw5-dev qrencode
-  ```
 
 ### 🏗 Build
 
