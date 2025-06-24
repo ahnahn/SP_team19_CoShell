@@ -30,13 +30,12 @@
 
 ## ✨ Features
 
-* ✅ **To-Do List**: Create, complete, undo, delete, and edit tasks in a shared team list or local user list.
+* ✅ **To-Do List**: Create, complete, undo, delete, and edit tasks in a local user list.
 * ✅ **Chat**: Real-time terminal chat with nickname and port customization.
 * ✅ **QR Generator**: Generate QR codes for quick sharing of small data.
 * ✅ **World Clock**: Track local and global time zones within the UI.
 * ✅ **CLI Mode Support**: All features can also be used in CLI-based interaction without entering the UI mode.
 
-> ⚠️ `team` / `user` commands are currently disabled in the CoShell interface.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
