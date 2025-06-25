@@ -48,7 +48,7 @@ void draw_custom_help(WINDOW *custom) {
     box(custom, 0, 0);
     mvwprintw(custom, 1, 2, "To-Do [%s] Mode",
         strcmp(current_todo_file, TEAM_TODO_FILE)==0 ? "Team" : "User");
-    mvwprintw(custom, 2, 2, "Enter %s to switch mode",
+    mvwprintw(custom, 2, 2, "Enter \"%s\" to switch mode",
         strcmp(current_todo_file, TEAM_TODO_FILE)==0 ? "user" : "team");
     mvwprintw(custom, 3, 2, "add  <item>");
     mvwprintw(custom, 4, 2, "done <num>");

@@ -105,7 +105,7 @@ static char tz2_label[16] = "UK GMT";
 // 로비 텍스트
 static const char *lobby_text[] = {
     "Welcome!",
-    "CoShell, short for \"cooperation in Shell,\" is a terminal-based collaboration toolbox.",
+    "CoShell, short for \"Cooperation in Shell,\" is a terminal-based collaboration toolbox.",
     "",
     "Enter a command below to start collaborating:",
     "",
