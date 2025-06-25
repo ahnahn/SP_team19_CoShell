@@ -33,8 +33,8 @@
 ## ✨ Features
 
 * ✅ **To-Do List**  
-  You can record a list of tasks that team members need to do.
-  The list window is fixed on the left box of CoShell, and you can add, delete, and modify the list. You can also check the box next to the list to indicate whether it has already been completed or is in progress.
+  Keep track of tasks for you or your team.
+  The list panel is fixed on the left side of CoShell, where you can add, delete, and modify items. You can also check or uncheck items to mark progress. (Team mode is currently unavailable.)
 
 * ✅ **Chat**  
   Team members can chat in real time. You can enter the server port number and set a nickname to distinguish between members.
