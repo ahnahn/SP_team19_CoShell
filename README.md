@@ -55,9 +55,10 @@
   For example:
   ```bash
   ./coshell add "Fix README formatting"
-  ./coshell done 3
+  ./coshell undo 3
   ./coshell list
   ./coshell edit 2 "Update contribution section"
+  ./coshell done 1
   ./coshell del 1
   ```
 
